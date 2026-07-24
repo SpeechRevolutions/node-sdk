@@ -1,0 +1,52 @@
+{
+  "name": "@speechrevolutions/stt",
+  "version": "0.2.0",
+  "description": "Official JavaScript/TypeScript SDK for the Speech Revolutions speech-to-text API",
+  "type": "module",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/esm/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "npm run clean && npm run build:esm && npm run build:cjs && node scripts/fixup-dist.mjs",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "prepare": "npm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "speech-to-text",
+    "stt",
+    "transcription",
+    "whisper",
+    "asr"
+  ],
+  "author": "Speech Revolutions",
+  "homepage": "https://speechrevolutions.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/speechrevolutions/node-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/speechrevolutions/node-sdk/issues"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.0"
+  }
+}
