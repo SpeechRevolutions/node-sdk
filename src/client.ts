@@ -67,6 +67,18 @@ function resolveApiKey(apiKey?: string): string {
   );
 }
 
+/** Internal signal that a multipart upload should fall back to single-shot. */
+class MultipartUnavailable extends Error {}
+
+interface MultipartCreateResponse {
+  job_id: string;
+  upload_id: string;
+  download_url: string;
+  part_size: number;
+  num_parts: number;
+  parts: { part_number: number; url: string }[];
+}
+
 export class STTClient {
   readonly apiKey: string;
   readonly baseUrl: string;
@@ -75,6 +87,7 @@ export class STTClient {
   private readonly maxRetries: number;
   private readonly retryBackoffMs: number;
   private readonly requestInit: RequestInit;
+  private readonly multipart: boolean;
 
   constructor(opts: STTClientOptions | string = {}) {
     const options: STTClientOptions =
@@ -86,6 +99,9 @@ export class STTClient {
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.retryBackoffMs = options.retryBackoffMs ?? DEFAULT_RETRY_BACKOFF_MS;
     this.requestInit = options.requestInit ?? {};
+    // Prefer multipart; falls back to a single presigned PUT if the server has
+    // multipart disabled (404) or a multipart upload fails mid-flight.
+    this.multipart = options.multipart ?? true;
   }
 
   private retryDelayMs(attempt: number, retryAfterMs?: number): number {
@@ -105,22 +121,23 @@ export class STTClient {
     const show = options.progress ?? false;
     const { data, fileSize } = await readAudio(audio, this.fetchFn);
 
-    const job = await this.createUploadJob(fileSize, opts);
-
     // Upload phase: byte-level "Uploading" bar, then a "Transcribing" bar.
     const upload = resolveProgress(options.onUploadProgress, show, {
       label: "Uploading",
       bytesMode: true,
     });
+    let jobId: string;
+    let jobDownloadUrl: string;
     try {
-      await this.uploadAudio(job.uploadUrl, data, {
-        jobId: job.jobId,
-        onProgress: upload.callback,
-      });
+      ({ jobId, downloadUrl: jobDownloadUrl } = await this.ingestUpload(
+        data,
+        fileSize,
+        opts,
+        upload.callback,
+      ));
     } finally {
       upload.printer?.close();
     }
-    await this.completeUpload(job.jobId);
 
     const transcribeProgress = resolveProgress(onTranscribeProgress, show, {
       label: "Transcribing",
@@ -129,8 +146,8 @@ export class STTClient {
     let downloadUrl: string;
     try {
       ({ content, downloadUrl } = await this.waitForResult(
-        job.jobId,
-        job.downloadUrl,
+        jobId,
+        jobDownloadUrl,
         transcribeProgress.callback,
       ));
     } finally {
@@ -138,7 +155,7 @@ export class STTClient {
     }
 
     return parseTranscript({
-      jobId: job.jobId,
+      jobId,
       content,
       outputType: opts.outputType,
       downloadUrl,
@@ -173,31 +190,27 @@ export class STTClient {
   ): Promise<string> {
     const opts = resolveOptions(options);
     const { data, fileSize } = await readAudio(audio, this.fetchFn);
-    const job = await this.createUploadJob(fileSize, opts);
     const upload = resolveProgress(options.onUploadProgress, options.progress ?? false, {
       label: "Uploading",
       bytesMode: true,
     });
+    let jobId: string;
     try {
-      await this.uploadAudio(job.uploadUrl, data, {
-        jobId: job.jobId,
-        onProgress: upload.callback,
-      });
+      ({ jobId } = await this.ingestUpload(data, fileSize, opts, upload.callback));
     } finally {
       upload.printer?.close();
     }
-    await this.completeUpload(job.jobId);
-    return job.jobId;
+    return jobId;
   }
 
   // upload flow
 
-  async createUploadJob(
+  /** JSON body shared by the single-shot and multipart create endpoints. */
+  private uploadBody(
     fileSize: number,
-    options: TranscribeOptions = {},
-  ): Promise<UploadJob> {
-    const opts = resolveOptions(options);
-    const body = {
+    opts: ReturnType<typeof resolveOptions>,
+  ): Record<string, unknown> {
+    return {
       file_size: fileSize,
       output_type: opts.outputType,
       word_timestamps: opts.wordTimestamps,
@@ -207,6 +220,106 @@ export class STTClient {
       ...(opts.customVocabulary ? { custom_vocabulary: opts.customVocabulary } : {}),
       ...(opts.callbackUrl ? { callback_url: opts.callbackUrl } : {}),
     };
+  }
+
+  /**
+   * Get audio into the platform and return `{ jobId, downloadUrl }`. Prefers a
+   * multipart upload (when enabled) and falls back to a single presigned PUT if
+   * the server has multipart disabled or a multipart upload fails mid-flight.
+   */
+  private async ingestUpload(
+    data: Uint8Array,
+    fileSize: number,
+    opts: ReturnType<typeof resolveOptions>,
+    onProgress?: ProgressCallback,
+  ): Promise<{ jobId: string; downloadUrl: string }> {
+    if (this.multipart) {
+      try {
+        return await this.uploadMultipart(data, fileSize, opts, onProgress);
+      } catch (err) {
+        if (!(err instanceof MultipartUnavailable)) throw err;
+        // multipart unavailable — fall through to the single-shot path
+      }
+    }
+    const job = await this.createUploadJob(fileSize, opts);
+    await this.uploadAudio(job.uploadUrl, data, { jobId: job.jobId, onProgress });
+    await this.completeUpload(job.jobId);
+    return { jobId: job.jobId, downloadUrl: job.downloadUrl };
+  }
+
+  /**
+   * S3 multipart flow: create -> PUT each part -> complete. Throws
+   * {@link MultipartUnavailable} if the server has multipart disabled (404) or a
+   * mid-flight failure means we should retry via the single-shot path.
+   */
+  private async uploadMultipart(
+    data: Uint8Array,
+    fileSize: number,
+    opts: ReturnType<typeof resolveOptions>,
+    onProgress?: ProgressCallback,
+  ): Promise<{ jobId: string; downloadUrl: string }> {
+    let created: MultipartCreateResponse;
+    try {
+      created = await this.apiRequest<MultipartCreateResponse>(
+        "POST",
+        "/api/v1/upload/multipart/create",
+        this.uploadBody(fileSize, opts),
+      );
+    } catch (err) {
+      // The route returns 404 when multipart is disabled.
+      if (err instanceof JobNotFoundError) throw new MultipartUnavailable();
+      throw err;
+    }
+
+    const jobId = String(created.job_id);
+    const partSize = Number(created.part_size);
+    const byteCb = byteProgressAdapter(onProgress);
+    const completedParts: { part_number: number; etag: string }[] = [];
+    let uploaded = 0;
+    try {
+      for (const part of created.parts) {
+        const number = Number(part.part_number);
+        const start = (number - 1) * partSize;
+        const chunk = data.subarray(start, start + partSize);
+        const etag = await this.putPart(part.url, chunk);
+        completedParts.push({ part_number: number, etag });
+        uploaded += chunk.length;
+        byteCb?.(uploaded, fileSize);
+      }
+      await this.apiRequest("POST", "/api/v1/upload/multipart/complete", {
+        job_id: jobId,
+        parts: completedParts,
+      });
+    } catch (err) {
+      // Roll back the partial upload, then fall back to a single-shot PUT.
+      try {
+        await this.apiRequest("POST", "/api/v1/upload/multipart/abort", { job_id: jobId });
+      } catch {
+        /* best effort */
+      }
+      throw new MultipartUnavailable(String(err));
+    }
+
+    return { jobId, downloadUrl: String(created.download_url) };
+  }
+
+  /** PUT one part to its presigned URL and return the S3 ETag. */
+  private async putPart(url: string, chunk: Uint8Array): Promise<string> {
+    const resp = await this.fetchFn(url, { method: "PUT", body: toArrayBuffer(chunk) });
+    if (resp.status !== 200 && resp.status !== 204) {
+      throw new UploadError(`part upload failed (HTTP ${resp.status})`);
+    }
+    const etag = resp.headers.get("ETag") ?? resp.headers.get("etag");
+    if (!etag) throw new UploadError("part upload response missing ETag header");
+    return etag;
+  }
+
+  async createUploadJob(
+    fileSize: number,
+    options: TranscribeOptions = {},
+  ): Promise<UploadJob> {
+    const opts = resolveOptions(options);
+    const body = this.uploadBody(fileSize, opts);
 
     const data = await this.apiRequest<{
       job_id: string;

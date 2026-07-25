@@ -86,6 +86,12 @@ export interface STTClientOptions {
    * Node: pass `{ dispatcher: new ProxyAgent(url) }` (from `undici`).
    */
   requestInit?: RequestInit;
+  /**
+   * Prefer S3 multipart uploads and fall back to a single presigned PUT if the
+   * server has multipart disabled or a multipart upload fails mid-flight.
+   * Default true.
+   */
+  multipart?: boolean;
 }
 
 export function resolveOptions(options: TranscribeOptions = {}): Required<
