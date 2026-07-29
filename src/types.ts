@@ -23,7 +23,7 @@ export interface TranscribeOptions {
 
 export interface UploadJob {
   jobId: string;
-  uploadUrl: string | PresignedPost;
+  uploadUrl: string;
   downloadUrl: string;
   contentType: string;
   expiresIn: number;
@@ -35,11 +35,6 @@ export interface JobStatus {
   downloadUrl?: string;
   failedStage?: string;
   reason?: string;
-}
-
-export interface PresignedPost {
-  url: string;
-  fields?: Record<string, string>;
 }
 
 export interface ProgressEvent {

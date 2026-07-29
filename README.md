@@ -45,6 +45,9 @@ const result = await client.transcribeUrl("https://example.com/audio.mp3");
 const result = await client.transcribe("https://example.com/audio.mp3");
 ```
 
+The platform fetches the URL itself — the audio never passes through your
+process.
+
 ### Options as an object
 
 Pass options as the second argument. `diarize` is an alias for `speakerLabels`.
@@ -150,6 +153,24 @@ const page = await client.listJobs({ limit: 50 });  // { jobs, nextBefore }
 `new SpeechRevolutions({ maxRetries: 3, retryBackoffMs: 500, requestInit: { dispatcher } })`.
 Transient 429/5xx/network errors are retried (honoring `Retry-After`). Errors are
 typed and carry `.statusCode` and `.requestId`.
+
+## Timeouts and retries
+
+API requests that fail to connect or return 429/500/502/503/504 are retried with
+exponential backoff, honoring `Retry-After`. Uploads and the progress stream
+have their own retry loops.
+
+```ts
+const client = new STTClient({
+  timeout: 600,        // whole-job wait in seconds (SSE + polling)
+  maxRetries: 3,       // extra attempts per API request
+  retryBackoffMs: 500,
+  requestInit: { signal: controller.signal }, // aborts propagate as AbortError
+});
+```
+
+Errors carry `statusCode`, `requestId` and `body` where the server supplied
+them; `RateLimitError.retryAfter` holds the server's hint in seconds.
 
 ## Auth
 

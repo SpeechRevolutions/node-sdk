@@ -120,6 +120,51 @@ function utterancesFromWords(words: Word[]): Utterance[] {
   return out;
 }
 
+/**
+ * Prefers the server's diarization segments, which separate turns the speaker
+ * labels alone cannot (the same speaker talking twice). Falls back to grouping
+ * consecutive words by speaker.
+ */
+function utterancesFromDiarization(words: Word[], diarization: unknown): Utterance[] {
+  if (!Array.isArray(diarization) || diarization.length === 0) {
+    return utterancesFromWords(words);
+  }
+
+  const out: Utterance[] = [];
+  for (const seg of diarization as Record<string, unknown>[]) {
+    const start = asNumber(seg?.start);
+    const end = asNumber(seg?.end);
+    if (start === undefined || end === undefined) continue;
+
+    const segWords = wordsWithin(words, start, end);
+    const text = joinWords(segWords);
+    out.push({
+      text,
+      transcript: text,
+      speaker: seg.speaker == null ? undefined : String(seg.speaker),
+      start,
+      end,
+      words: segWords,
+    });
+  }
+  return out.length ? out : utterancesFromWords(words);
+}
+
+/**
+ * Words a segment covers, falling back to a midpoint test for words that
+ * straddle the boundary.
+ */
+function wordsWithin(words: Word[], start: number, end: number): Word[] {
+  const eps = 1e-3;
+  const timed = words.filter((w) => w.start !== undefined && w.end !== undefined);
+  const inside = timed.filter((w) => w.start! >= start - eps && w.end! <= end + eps);
+  if (inside.length) return inside;
+  return timed.filter((w) => {
+    const mid = (w.start! + w.end!) / 2;
+    return mid >= start && mid <= end;
+  });
+}
+
 function speakerIndex(speaker?: string): number | string | undefined {
   if (speaker == null) return undefined;
   if (speaker.toUpperCase().startsWith("SPEAKER_")) {
@@ -182,7 +227,7 @@ export function parseTranscript(opts: {
   const words = Array.isArray(raw.words)
     ? (raw.words as Record<string, unknown>[]).map(parseWord)
     : [];
-  const utterances = utterancesFromWords(words);
+  const utterances = utterancesFromDiarization(words, raw.diarization);
   const languages = Array.isArray(raw.languages)
     ? (raw.languages as Record<string, unknown>[]).map(parseLanguageSegment)
     : [];

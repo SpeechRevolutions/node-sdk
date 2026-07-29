@@ -12,6 +12,14 @@ export async function* parseSSEStream(
   const decoder = new TextDecoder();
   let buffer = "";
   let current: SSEEvent = {};
+  let dataLines: string[] = [];
+
+  const flush = (): SSEEvent | undefined => {
+    if (!dataLines.length) return undefined;
+    const event = { ...current, data: dataLines.join("\n") };
+    dataLines = [];
+    return event;
+  };
 
   while (true) {
     const { done, value } = await reader.read();
@@ -23,9 +31,8 @@ export async function* parseSSEStream(
 
     for (const rawLine of lines) {
       if (rawLine === "") {
-        if (current.data !== undefined) {
-          yield current;
-        }
+        const event = flush();
+        if (event) yield event;
         current = {};
         continue;
       }
@@ -45,11 +52,10 @@ export async function* parseSSEStream(
 
       if (field === "id") current.id = valueStr;
       else if (field === "event") current.event = valueStr;
-      else if (field === "data") current.data = valueStr;
+      else if (field === "data") dataLines.push(valueStr);
     }
   }
 
-  if (current.data !== undefined) {
-    yield current;
-  }
+  const event = flush();
+  if (event) yield event;
 }

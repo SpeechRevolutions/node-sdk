@@ -20,7 +20,6 @@ import {
   resolveOptions,
   type JobStatus,
   type OutputType,
-  type PresignedPost,
   type ProgressCallback,
   type STTClientOptions,
   type TranscribeOptions,
@@ -111,6 +110,10 @@ export class STTClient {
 
   // high-level
 
+  /**
+   * Transcribe a local file path, remote URL, bytes, or Blob. A URL is handed
+   * to the platform to fetch, so nothing is uploaded from here.
+   */
   async transcribe(
     audio: Uint8Array | ArrayBuffer | Blob | string,
     options: TranscribeOptions = {},
@@ -119,7 +122,13 @@ export class STTClient {
     const opts = resolveOptions(options);
     const onTranscribeProgress = onProgress ?? options.onProgress;
     const show = options.progress ?? false;
-    const { data, fileSize } = await readAudio(audio, this.fetchFn);
+
+    if (typeof audio === "string" && isUrl(audio)) {
+      const { jobId, downloadUrl } = await this.submitUrl(audio, opts);
+      return this.awaitTranscript(jobId, downloadUrl, opts, onTranscribeProgress, show);
+    }
+
+    const { data, fileSize } = await readAudio(audio);
 
     // Upload phase: byte-level "Uploading" bar, then a "Transcribing" bar.
     const upload = resolveProgress(options.onUploadProgress, show, {
@@ -139,9 +148,18 @@ export class STTClient {
       upload.printer?.close();
     }
 
-    const transcribeProgress = resolveProgress(onTranscribeProgress, show, {
-      label: "Transcribing",
-    });
+    return this.awaitTranscript(jobId, jobDownloadUrl, opts, onTranscribeProgress, show);
+  }
+
+  /** Waits out the transcription phase and parses the result. */
+  private async awaitTranscript(
+    jobId: string,
+    jobDownloadUrl: string,
+    opts: ReturnType<typeof resolveOptions>,
+    onProgress: ProgressCallback | undefined,
+    show: boolean,
+  ): Promise<Transcript> {
+    const transcribeProgress = resolveProgress(onProgress, show, { label: "Transcribing" });
     let content: Uint8Array;
     let downloadUrl: string;
     try {
@@ -160,6 +178,19 @@ export class STTClient {
       outputType: opts.outputType,
       downloadUrl,
     });
+  }
+
+  /** Registers a job the platform fetches itself. No bytes leave this process. */
+  private async submitUrl(
+    audioUrl: string,
+    opts: ReturnType<typeof resolveOptions>,
+  ): Promise<{ jobId: string; downloadUrl: string }> {
+    const data = await this.apiRequest<{ job_id: string; download_url: string }>(
+      "POST",
+      "/api/v1/upload",
+      { ...this.uploadBody(undefined, opts), audio_url: audioUrl },
+    );
+    return { jobId: String(data.job_id), downloadUrl: String(data.download_url) };
   }
 
   async transcribeUrl(
@@ -189,7 +220,13 @@ export class STTClient {
     options: TranscribeOptions = {},
   ): Promise<string> {
     const opts = resolveOptions(options);
-    const { data, fileSize } = await readAudio(audio, this.fetchFn);
+
+    if (typeof audio === "string" && isUrl(audio)) {
+      const { jobId } = await this.submitUrl(audio, opts);
+      return jobId;
+    }
+
+    const { data, fileSize } = await readAudio(audio);
     const upload = resolveProgress(options.onUploadProgress, options.progress ?? false, {
       label: "Uploading",
       bytesMode: true,
@@ -207,11 +244,11 @@ export class STTClient {
 
   /** JSON body shared by the single-shot and multipart create endpoints. */
   private uploadBody(
-    fileSize: number,
+    fileSize: number | undefined,
     opts: ReturnType<typeof resolveOptions>,
   ): Record<string, unknown> {
     return {
-      file_size: fileSize,
+      ...(fileSize === undefined ? {} : { file_size: fileSize }),
       output_type: opts.outputType,
       word_timestamps: opts.wordTimestamps,
       speaker_labels: opts.speakerLabels,
@@ -323,7 +360,7 @@ export class STTClient {
 
     const data = await this.apiRequest<{
       job_id: string;
-      upload_url: string | PresignedPost;
+      upload_url: string;
       download_url: string;
       content_type?: string;
       expires_in?: number;
@@ -343,11 +380,10 @@ export class STTClient {
   }
 
   async uploadAudio(
-    uploadUrl: string | PresignedPost,
+    uploadUrl: string,
     data: Uint8Array,
     opts: {
       jobId?: string;
-      filename?: string;
       contentType?: string;
       onProgress?: ProgressCallback;
     } = {},
@@ -369,7 +405,7 @@ export class STTClient {
       for (let attempt = 1; attempt <= UPLOAD_MAX_ATTEMPTS; attempt++) {
         try {
           // A fresh streamed body per attempt so retries restart progress from 0.
-          await this.putOrPostUpload(uploadUrl, data, opts.filename, contentType, byteCb);
+          await this.putUpload(uploadUrl, data, contentType, byteCb);
           return;
         } catch (err) {
           lastError = err;
@@ -527,6 +563,7 @@ export class STTClient {
           body: body === undefined ? undefined : JSON.stringify(body),
         });
       } catch (err) {
+        if (isAbort(err)) throw err;
         // Retry transient network failures with exponential backoff.
         if (attempt <= this.maxRetries) {
           await sleep(this.retryDelayMs(attempt));
@@ -575,30 +612,14 @@ export class STTClient {
     });
   }
 
-  private async putOrPostUpload(
-    uploadUrl: string | PresignedPost,
+  private async putUpload(
+    uploadUrl: string,
     data: Uint8Array,
-    filename: string | undefined,
     contentType: string,
     byteCb?: ByteProgressFn,
   ): Promise<void> {
     let resp: Response;
-    if (typeof uploadUrl === "object" && uploadUrl !== null && "url" in uploadUrl) {
-      // Presigned POST (multipart). FormData can't be observed for progress, so
-      // just report a single 100% tick once it succeeds.
-      const form = new FormData();
-      for (const [k, v] of Object.entries(uploadUrl.fields ?? {})) {
-        form.append(k, v);
-      }
-      const ab = toArrayBuffer(data);
-      form.append(
-        "file",
-        new Blob([ab], { type: contentType }),
-        filename ?? "audio",
-      );
-      resp = await this.fetchFn(uploadUrl.url, { method: "POST", body: form });
-      if (resp.ok) byteCb?.(data.byteLength, data.byteLength);
-    } else if (byteCb) {
+    if (byteCb) {
       // Presigned PUT with progress: stream the body in chunks and report after
       // each. An explicit Content-Length keeps undici from switching to
       // Transfer-Encoding: chunked (which S3 rejects); `duplex: "half"` is
@@ -612,9 +633,9 @@ export class STTClient {
         body: iterWithProgress(data, byteCb),
         duplex: "half",
       };
-      resp = await this.fetchFn(uploadUrl as string, init as unknown as RequestInit);
+      resp = await this.fetchFn(uploadUrl, init as unknown as RequestInit);
     } else {
-      resp = await this.fetchFn(uploadUrl as string, {
+      resp = await this.fetchFn(uploadUrl, {
         method: "PUT",
         headers: { "Content-Type": contentType },
         body: toArrayBuffer(data),
@@ -798,6 +819,13 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** True for an aborted request, which must propagate rather than be retried. */
+function isAbort(err: unknown): boolean {
+  return (
+    err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError")
+  );
+}
+
 function toArrayBuffer(data: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(data.byteLength);
   copy.set(data);
@@ -810,25 +838,18 @@ function asInt(value: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function isUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
+
 async function readAudio(
   audio: Uint8Array | ArrayBuffer | Blob | string,
-  fetchFn: typeof fetch,
 ): Promise<{ data: Uint8Array; fileSize: number }> {
   let data: Uint8Array;
 
   if (typeof audio === "string") {
-    if (/^https?:\/\//i.test(audio)) {
-      const resp = await fetchFn(audio);
-      if (!resp.ok) {
-        throw new APIError(`Failed to download audio URL (HTTP ${resp.status})`, {
-          statusCode: resp.status,
-        });
-      }
-      data = new Uint8Array(await resp.arrayBuffer());
-    } else {
-      const { readFile } = await import("node:fs/promises");
-      data = new Uint8Array(await readFile(audio));
-    }
+    const { readFile } = await import("node:fs/promises");
+    data = new Uint8Array(await readFile(audio));
   } else if (audio instanceof ArrayBuffer) {
     data = new Uint8Array(audio);
   } else if (audio instanceof Uint8Array) {

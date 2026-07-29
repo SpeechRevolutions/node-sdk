@@ -11,7 +11,6 @@ export { computePercent } from "./types.js";
 export type {
   JobStatus,
   OutputType,
-  PresignedPost,
   ProcessingTier,
   ProgressCallback,
   ProgressEvent,
