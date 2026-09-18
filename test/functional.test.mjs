@@ -127,7 +127,9 @@ describe("functional (real server)", { skip: AVAILABLE ? false : `mock not found
 
   test("submit returns a job id without waiting", async () => {
     const id = await client(mock.base).submit("https://example.com/a.mp3");
-    assert.match(id, /^job_/);
+    // Production job ids are UUIDs. Treat them as opaque, but pin the shape so a
+    // mock that invents its own format cannot pass for the real thing.
+    assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   });
 
   test("getJobStatus reports completion with a download url", async () => {
@@ -155,8 +157,14 @@ describe("functional (real server)", { skip: AVAILABLE ? false : `mock not found
       let before;
       for (let i = 0; i < 10; i++) {
         const page = await c.listJobs({ limit: 2, before });
-        seen.push(...page.jobs.map((j) => j.job_id ?? j.jobId));
-        before = page.next_before ?? page.nextBefore;
+        // The wire shape is {job_id, created_at}; this SDK normalises it to
+        // camelCase, so callers read jobId / createdAt / nextBefore. There is
+        // no status field on a summary either way.
+        for (const j of page.jobs) {
+          assert.deepEqual(Object.keys(j).sort(), ["createdAt", "jobId"]);
+          seen.push(j.jobId);
+        }
+        before = page.nextBefore;
         if (!before) break;
       }
       assert.equal(seen.length, 5);
