@@ -26,6 +26,15 @@ import {
   type UploadJob,
 } from "./types.js";
 
+/**
+ * Identifies the SDK to the platform, which makes a client-side problem findable
+ * in our edge logs without the caller reproducing it. It is also insurance: the
+ * edge answers a request with NO User-Agent with a bare 403, which is how the C#
+ * client turned out to be unable to reach production at all while passing every
+ * test that pointed at a local mock.
+ */
+const USER_AGENT = "speechrevolutions-node/0.2.0";
+
 const DEFAULT_BASE_URL = "https://api.speechrevolutions.com";
 const UPLOAD_PROGRESS_INTERVAL_MS = 10_000;
 const UPLOAD_MAX_ATTEMPTS = 4;
@@ -601,6 +610,7 @@ export class STTClient {
     return {
       "X-API-Key": this.apiKey,
       "Content-Type": "application/json",
+      "User-Agent": USER_AGENT,
       ...extra,
     };
   }
@@ -772,6 +782,7 @@ export class STTClient {
 
     const headers: Record<string, string> = {
       "X-API-Key": this.apiKey,
+      "User-Agent": USER_AGENT,
       Accept: "text/event-stream",
     };
     if (lastEventId !== undefined) headers["Last-Event-ID"] = lastEventId;
