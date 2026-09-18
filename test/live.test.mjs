@@ -18,7 +18,9 @@
  */
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -252,5 +254,108 @@ describe("live API", { skip: LIVE ? false : "opt-in: set SR_LIVE=1 (creates real
     } finally {
       await new Promise((r) => server.close(r));
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Ingestion paths, output types, options and transforms
+  //
+  // The tests above cover the path most callers take. These cover the rest of
+  // the published surface, so that "tested live" means every public method has
+  // actually been run against production rather than only the common ones.
+  //
+  // The URL tests need a PUBLICLY reachable audio file, because the platform
+  // fetches it server-side: SR_LIVE_AUDIO_URL=https://.../clip.mp3
+  // ---------------------------------------------------------------------------
+
+  test("transcribeUrl is fetched server-side", { timeout: 900_000 }, async (t) => {
+    const url = process.env.SR_LIVE_AUDIO_URL;
+    if (!url) {
+      t.skip("set SR_LIVE_AUDIO_URL to a publicly reachable audio file");
+      return;
+    }
+    const c = client();
+    const explicit = await c.transcribeUrl(url);
+    assert.ok(explicit.text.trim());
+
+    // transcribe() auto-detects an http(s) URL and must take the same path.
+    const auto = await c.transcribe(url);
+    assert.ok(auto.text.trim());
+  });
+
+  test("transcribeFile", { timeout: 900_000 }, async () => {
+    const audio = audioPath();
+    assert.ok(audio, "no test audio found; set SR_LIVE_AUDIO");
+    const result = await client().transcribeFile(audio);
+    assert.ok(result.text.trim());
+  });
+
+  // Only srt had ever been checked live, and docx/pdf render server-side.
+  test("every output type", { timeout: 900_000 }, async () => {
+    const audio = audioPath();
+    assert.ok(audio, "no test audio found; set SR_LIVE_AUDIO");
+    const c = client();
+
+    for (const [outputType, contains] of [
+      ["json", null], ["txt", null], ["srt", "-->"],
+      ["vtt", "-->"], ["docx", null], ["pdf", null],
+    ]) {
+      const result = await c.transcribe(audio, { outputType });
+      assert.ok(result.content.byteLength > 0, `${outputType} came back with no bytes`);
+      if (contains) {
+        assert.ok(result.text.includes(contains),
+          `${outputType}: ${result.text.slice(0, 120)}`);
+      }
+      const head = Buffer.from(result.content.slice(0, 4)).toString("latin1");
+      if (outputType === "docx") assert.ok(head.startsWith("PK"), "docx is not a zip");
+      if (outputType === "pdf") assert.ok(head.startsWith("%PDF"), "pdf lacks %PDF header");
+    }
+  });
+
+  test("transcribe options against the real model", { timeout: 900_000 }, async () => {
+    const audio = audioPath();
+    assert.ok(audio, "no test audio found; set SR_LIVE_AUDIO");
+    const c = client();
+
+    // diarize is the Deepgram-compatible alias for speakerLabels.
+    const diarized = await c.transcribe(audio, { diarize: true });
+    assert.ok(diarized.utterances.length > 0, "diarize produced no utterances");
+
+    const vocab = await c.transcribe(audio, { customVocabulary: ["Kyiv", "Dnipro"] });
+    assert.ok(vocab.text.trim());
+
+    const noTs = await c.transcribe(audio, { wordTimestamps: false });
+    assert.ok(noTs.text.trim());
+  });
+
+  // The single presigned PUT, rather than the multipart flow used by default.
+  test("the single-shot upload path", { timeout: 900_000 }, async () => {
+    const audio = audioPath();
+    assert.ok(audio, "no test audio found; set SR_LIVE_AUDIO");
+
+    const c = new SpeechRevolutions({ timeout: 900_000, multipart: false });
+    const result = await c.transcribe(audio);
+    assert.ok(result.text.trim(), "empty transcript from the single-shot upload path");
+  });
+
+  // A mock can hand back a shape these happen to survive; production is the
+  // real input.
+  test("transcript transforms on a real response", { timeout: 900_000 }, async () => {
+    const audio = audioPath();
+    assert.ok(audio, "no test audio found; set SR_LIVE_AUDIO");
+
+    const result = await client().transcribe(audio, { speakerLabels: true });
+
+    const d = result.toDict();
+    for (const k of ["id", "text", "words", "utterances"]) {
+      assert.ok(k in d, `toDict is missing ${k}`);
+    }
+
+    const dg = result.toDeepgram();
+    assert.ok("results" in dg, `toDeepgram has no results key: ${Object.keys(dg)}`);
+
+    const dir = await mkdtemp(path.join(tmpdir(), "sr-live-"));
+    const written = await result.save(path.join(dir, "out"));
+    assert.ok(written.endsWith(".json"), written);
+    assert.ok(statSync(written).size > 0, "save wrote an empty file");
   });
 });
