@@ -39,6 +39,49 @@ const RETRY_BACKOFF_MAX_MS = 30_000;
 const RETRY_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 const REQUEST_ID_HEADERS = ["x-request-id", "x-amzn-requestid", "cf-ray"];
 
+/**
+ * Endpoints that CREATE a job, and so are not safe to blindly retry.
+ *
+ * A job is created the moment the server handles one of these; the response
+ * carrying the job_id back is what can be lost. Retrying after the request may
+ * have arrived creates a SECOND job for the same audio — two transcripts, two
+ * charges — and the caller never learns about the orphan. The API has no
+ * idempotency key, so the only safe rule is to retry these solely when the
+ * request provably never reached the server.
+ *
+ * Every other endpoint either reads, or acts on a jobId the caller already
+ * holds, and stays fully retryable.
+ */
+const JOB_CREATING_PATHS = new Set([
+  "/api/v1/upload",
+  "/api/v1/upload/multipart/create",
+]);
+
+function createsJob(path: string): boolean {
+  const clean = path.split("?")[0].replace(/\/+$/, "");
+  return JOB_CREATING_PATHS.has(clean);
+}
+
+/**
+ * Network error codes that mean no connection was ever established, so the
+ * request cannot have been processed. Anything else (a reset mid-flight, a
+ * headers timeout) is ambiguous and must not be retried for a create.
+ */
+const NEVER_SENT_CODES = new Set([
+  "ECONNREFUSED",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "UND_ERR_CONNECT_TIMEOUT",
+]);
+
+function neverReachedServer(err: unknown): boolean {
+  const code = (err as { cause?: { code?: string }; code?: string })?.cause?.code
+    ?? (err as { code?: string })?.code;
+  return typeof code === "string" && NEVER_SENT_CODES.has(code);
+}
+
 function extractRequestId(headers: Headers): string | undefined {
   for (const name of REQUEST_ID_HEADERS) {
     const value = headers.get(name);
@@ -551,6 +594,9 @@ export class STTClient {
     body?: unknown,
   ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
+    // Job-creating calls retry only when the request provably never landed;
+    // anything else would risk a duplicate job and a duplicate charge.
+    const creating = createsJob(path);
     let attempt = 0;
     while (true) {
       attempt += 1;
@@ -565,7 +611,8 @@ export class STTClient {
       } catch (err) {
         if (isAbort(err)) throw err;
         // Retry transient network failures with exponential backoff.
-        if (attempt <= this.maxRetries) {
+        const safe = !creating || neverReachedServer(err);
+        if (safe && attempt <= this.maxRetries) {
           await sleep(this.retryDelayMs(attempt));
           continue;
         }
@@ -573,7 +620,13 @@ export class STTClient {
       }
 
       // Retry throttling / transient server errors, honoring Retry-After.
-      if (RETRY_STATUS_CODES.has(resp.status) && attempt <= this.maxRetries) {
+      // For a create, only 429 is safe: the server refused it outright, so no
+      // job exists. A 5xx may well have created one before failing.
+      if (
+        RETRY_STATUS_CODES.has(resp.status) &&
+        attempt <= this.maxRetries &&
+        (!creating || resp.status === 429)
+      ) {
         const retryAfterMs = parseRetryAfterMs(resp.headers.get("Retry-After"));
         await sleep(this.retryDelayMs(attempt, retryAfterMs));
         continue;
