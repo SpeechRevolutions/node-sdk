@@ -109,6 +109,23 @@ function resolveApiKey(apiKey?: string): string {
   );
 }
 
+/**
+ * Resolves the API host: an explicit option, then the environment, then
+ * production.
+ *
+ * Symmetric with the API key — if a caller can supply a key from the
+ * environment, they can point it at an environment too. Needed for staging, for
+ * an egress proxy or gateway, and for running any published example against
+ * something that is not production.
+ */
+function resolveBaseUrl(baseUrl?: string): string {
+  const env =
+    (typeof process !== "undefined" &&
+      (process.env.SPEECHREVOLUTIONS_BASE_URL || process.env.STT_BASE_URL)) ||
+    undefined;
+  return (baseUrl ?? env ?? DEFAULT_BASE_URL).replace(/\/$/, "");
+}
+
 /** Internal signal that a multipart upload should fall back to single-shot. */
 class MultipartUnavailable extends Error {}
 
@@ -135,7 +152,7 @@ export class STTClient {
     const options: STTClientOptions =
       typeof opts === "string" ? { apiKey: opts } : opts ?? {};
     this.apiKey = resolveApiKey(options.apiKey);
-    this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
+    this.baseUrl = resolveBaseUrl(options.baseUrl);
     this.timeout = options.timeout ?? 600;
     this.fetchFn = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;

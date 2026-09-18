@@ -158,3 +158,39 @@ describe("the scenario the policy exists for", () => {
     assert.equal(calls[0].init.method, "POST");
   });
 });
+
+describe("base URL resolution", () => {
+  const ENV_KEYS = ["SPEECHREVOLUTIONS_BASE_URL", "STT_BASE_URL"];
+  const saved = {};
+
+  test("explicit option wins over the environment", () => {
+    process.env.SPEECHREVOLUTIONS_BASE_URL = "https://from-env.example";
+    const c = new SpeechRevolutions({ apiKey: "k", baseUrl: "https://explicit.example" });
+    assert.equal(c.baseUrl, "https://explicit.example");
+    delete process.env.SPEECHREVOLUTIONS_BASE_URL;
+  });
+
+  test("falls back to SPEECHREVOLUTIONS_BASE_URL", () => {
+    process.env.SPEECHREVOLUTIONS_BASE_URL = "https://staging.example";
+    assert.equal(new SpeechRevolutions({ apiKey: "k" }).baseUrl, "https://staging.example");
+    delete process.env.SPEECHREVOLUTIONS_BASE_URL;
+  });
+
+  test("falls back to STT_BASE_URL", () => {
+    process.env.STT_BASE_URL = "https://legacy.example";
+    assert.equal(new SpeechRevolutions({ apiKey: "k" }).baseUrl, "https://legacy.example");
+    delete process.env.STT_BASE_URL;
+  });
+
+  test("defaults to production", () => {
+    for (const k of ENV_KEYS) { saved[k] = process.env[k]; delete process.env[k]; }
+    assert.equal(new SpeechRevolutions({ apiKey: "k" }).baseUrl, "https://api.speechrevolutions.com");
+    for (const k of ENV_KEYS) if (saved[k] !== undefined) process.env[k] = saved[k];
+  });
+
+  test("a trailing slash is stripped", () => {
+    process.env.SPEECHREVOLUTIONS_BASE_URL = "https://x.example/";
+    assert.equal(new SpeechRevolutions({ apiKey: "k" }).baseUrl, "https://x.example");
+    delete process.env.SPEECHREVOLUTIONS_BASE_URL;
+  });
+});
