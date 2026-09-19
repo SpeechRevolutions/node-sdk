@@ -24,8 +24,8 @@
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "typecheck": "tsc -p tsconfig.json",
     "prepare": "npm run build",
-    "test": "npm run build && node --test test/",
-    "test:only": "node --test test/"
+    "test": "npm run build && node --test test/*.test.mjs",
+    "test:only": "node --test test/*.test.mjs"
   },
   "engines": {
     "node": ">=18"
