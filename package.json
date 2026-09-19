@@ -41,10 +41,10 @@
   "homepage": "https://speechrevolutions.com",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/speechrevolutions/node-sdk.git"
+    "url": "git+https://github.com/SpeechRevolutions/node-sdk.git"
   },
   "bugs": {
-    "url": "https://github.com/speechrevolutions/node-sdk/issues"
+    "url": "https://github.com/SpeechRevolutions/node-sdk/issues"
   },
   "license": "MIT",
   "publishConfig": {
