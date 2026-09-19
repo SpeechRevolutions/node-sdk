@@ -8,6 +8,7 @@ import {
   UploadError,
 } from "./exceptions.js";
 import { resolveProgress } from "./progress.js";
+import { VERSION } from "./version.js";
 import { parseSSEStream } from "./sse.js";
 import { parseTranscript, type Transcript } from "./transcript.js";
 import {
@@ -33,7 +34,7 @@ import {
  * client turned out to be unable to reach production at all while passing every
  * test that pointed at a local mock.
  */
-const USER_AGENT = "speechrevolutions-node/0.2.0";
+const USER_AGENT = `speechrevolutions-node/${VERSION}`;
 
 const DEFAULT_BASE_URL = "https://api.speechrevolutions.com";
 const UPLOAD_PROGRESS_INTERVAL_MS = 10_000;

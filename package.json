@@ -19,13 +19,14 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "npm run clean && npm run build:esm && npm run build:cjs && node scripts/fixup-dist.mjs",
+    "build": "npm run clean && npm run build:version && npm run build:esm && npm run build:cjs && node scripts/fixup-dist.mjs",
     "build:esm": "tsc -p tsconfig.esm.json",
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "typecheck": "tsc -p tsconfig.json",
     "prepare": "npm run build",
     "test": "npm run build && node --test test/*.test.mjs",
-    "test:only": "node --test test/*.test.mjs"
+    "test:only": "node --test test/*.test.mjs",
+    "build:version": "node scripts/gen-version.mjs"
   },
   "engines": {
     "node": ">=18"
