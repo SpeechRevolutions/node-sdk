@@ -10,23 +10,23 @@ type definitions either way.
 ## Install
 
 ```bash
-npm install @speechrevolutions/stt
+npm install speechrevolutions
 ```
 
 ```js
 // CommonJS
-const { SpeechRevolutions } = require("@speechrevolutions/stt");
+const { SpeechRevolutions } = require("speechrevolutions");
 ```
 
 ```ts
 // ESM / TypeScript
-import { SpeechRevolutions } from "@speechrevolutions/stt";
+import { SpeechRevolutions } from "speechrevolutions";
 ```
 
 ## Quick start
 
 ```ts
-import { SpeechRevolutions } from "@speechrevolutions/stt";
+import { SpeechRevolutions } from "speechrevolutions";
 
 const client = new SpeechRevolutions(); // SPEECHREVOLUTIONS_API_KEY or STT_API_KEY
 const result = await client.transcribe("meeting.mp3", { speakerLabels: true });

@@ -1,5 +1,5 @@
 {
-  "name": "@speechrevolutions/stt",
+  "name": "speechrevolutions",
   "version": "0.2.0",
   "description": "Official JavaScript/TypeScript SDK for the Speech Revolutions speech-to-text API",
   "type": "module",
