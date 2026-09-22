@@ -55,7 +55,7 @@ const timer = setInterval(() => {
   }
 }, 200);
 
-const result = await client.transcribe("audio.mp3
+const result = await client.transcribe("audio.mp3", {
   onUploadProgress: store.onUpload, // <- your handler; do anything with event.percent
   onProgress: store.onTranscribe,
 });

@@ -41,8 +41,8 @@ for (const u of result.utterances) {
 
 ```ts
 const result = await client.transcribeUrl("https://example.com/audio.mp3");
-// or
-const result = await client.transcribe("https://example.com/audio.mp3");
+// or, since transcribe() detects http(s) URLs:
+// const result = await client.transcribe("https://example.com/audio.mp3");
 ```
 
 The platform fetches the URL itself — the audio never passes through your
@@ -68,7 +68,7 @@ await client.transcribe("a.mp3", {
 | `speakerLabels` | `boolean` | `true` |
 | `diarize` | `boolean` (alias for `speakerLabels`) | — |
 | `nltk` | `boolean` (punctuation & capitalization) | `true` |
-| `tier` | `"standard" \| "economy"` | `"standard"` |
+| `tier` | `"standard"` | `"standard"` — the only tier currently available |
 | `customVocabulary` | `string[]` | `undefined` |
 | `onProgress` | `(event: ProgressEvent) => void` | `undefined` |
 | `onUploadProgress` | `(event: ProgressEvent) => void` | `undefined` |
@@ -88,7 +88,7 @@ await client.transcribe("meeting.mp3", { progress: true });
 // 2. Programmatic — read event.percent (0–100) to drive your own UI / API.
 await client.transcribe("meeting.mp3", {
   onProgress(event) {
-    // transcription: event.step is e.g. "transcribe", event.percent is 0–100
+    // transcription: event.step is "preprocess", "chunk:N" or "aggregation"; event.percent is 0–100
     console.log(event.percent, event.step);
   },
   onUploadProgress(event) {
@@ -161,6 +161,7 @@ exponential backoff, honoring `Retry-After`. Uploads and the progress stream
 have their own retry loops.
 
 ```ts
+const controller = new AbortController();
 const client = new SpeechRevolutions({
   timeout: 600,        // whole-job wait in seconds (SSE + polling)
   maxRetries: 3,       // extra attempts per API request
