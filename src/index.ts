@@ -1,7 +1,6 @@
 export {
   SpeechRevolutions,
   SpeechRevolutionsClient,
-  STTClient,
 } from "./client.js";
 export * from "./exceptions.js";
 export type { LanguageSegment, Transcript, Utterance, Word } from "./transcript.js";
@@ -14,7 +13,7 @@ export type {
   ProcessingTier,
   ProgressCallback,
   ProgressEvent,
-  STTClientOptions,
+  SpeechRevolutionsOptions,
   TranscribeOptions,
   UploadJob,
 } from "./types.js";

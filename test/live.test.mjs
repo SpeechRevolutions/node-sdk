@@ -32,7 +32,7 @@ const REPO = path.resolve(HERE, "../..");
 
 const LIVE =
   process.env.SR_LIVE === "1" &&
-  Boolean(process.env.SPEECHREVOLUTIONS_API_KEY || process.env.STT_API_KEY);
+  Boolean(process.env.SPEECHREVOLUTIONS_API_KEY);
 
 /** The shortest clip available: these create real, billed jobs. */
 function audioPath() {

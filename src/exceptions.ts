@@ -5,39 +5,39 @@
  * logs. `RateLimitError` also exposes `retryAfter` seconds.
  */
 
-export interface STTErrorOptions {
+export interface SpeechRevolutionsErrorOptions {
   statusCode?: number;
   requestId?: string;
   body?: string;
 }
 
-export class STTError extends Error {
+export class SpeechRevolutionsError extends Error {
   statusCode?: number;
   requestId?: string;
   body?: string;
 
-  constructor(message: string, opts?: STTErrorOptions) {
+  constructor(message: string, opts?: SpeechRevolutionsErrorOptions) {
     super(opts?.requestId ? `${message} (request_id=${opts.requestId})` : message);
-    this.name = "STTError";
+    this.name = "SpeechRevolutionsError";
     this.statusCode = opts?.statusCode;
     this.requestId = opts?.requestId;
     this.body = opts?.body;
   }
 }
 
-export class AuthenticationError extends STTError {
-  constructor(message = "Unauthorized — check your API key", opts?: STTErrorOptions) {
+export class AuthenticationError extends SpeechRevolutionsError {
+  constructor(message = "Unauthorized — check your API key", opts?: SpeechRevolutionsErrorOptions) {
     super(message, opts);
     this.name = "AuthenticationError";
   }
 }
 
-export class RateLimitError extends STTError {
+export class RateLimitError extends SpeechRevolutionsError {
   retryAfter?: number;
 
   constructor(
     message = "Rate limit exceeded — try again shortly",
-    opts?: STTErrorOptions & { retryAfter?: number },
+    opts?: SpeechRevolutionsErrorOptions & { retryAfter?: number },
   ) {
     super(message, opts);
     this.name = "RateLimitError";
@@ -45,23 +45,23 @@ export class RateLimitError extends STTError {
   }
 }
 
-export class JobNotFoundError extends STTError {
+export class JobNotFoundError extends SpeechRevolutionsError {
   constructor(
     message = "Job not found or upload session expired",
-    opts?: STTErrorOptions,
+    opts?: SpeechRevolutionsErrorOptions,
   ) {
     super(message, opts);
     this.name = "JobNotFoundError";
   }
 }
 
-export class JobFailedError extends STTError {
+export class JobFailedError extends SpeechRevolutionsError {
   step?: string;
   reason?: string;
 
   constructor(
     message: string,
-    opts?: STTErrorOptions & { step?: string; reason?: string },
+    opts?: SpeechRevolutionsErrorOptions & { step?: string; reason?: string },
   ) {
     super(message, opts);
     this.name = "JobFailedError";
@@ -70,22 +70,22 @@ export class JobFailedError extends STTError {
   }
 }
 
-export class UploadError extends STTError {
-  constructor(message: string, opts?: STTErrorOptions) {
+export class UploadError extends SpeechRevolutionsError {
+  constructor(message: string, opts?: SpeechRevolutionsErrorOptions) {
     super(message, opts);
     this.name = "UploadError";
   }
 }
 
-export class TimeoutError extends STTError {
-  constructor(message: string, opts?: STTErrorOptions) {
+export class TimeoutError extends SpeechRevolutionsError {
+  constructor(message: string, opts?: SpeechRevolutionsErrorOptions) {
     super(message, opts);
     this.name = "TimeoutError";
   }
 }
 
-export class APIError extends STTError {
-  constructor(message: string, opts?: STTErrorOptions) {
+export class APIError extends SpeechRevolutionsError {
+  constructor(message: string, opts?: SpeechRevolutionsErrorOptions) {
     super(message, opts);
     this.name = "APIError";
   }

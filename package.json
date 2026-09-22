@@ -1,6 +1,6 @@
 {
   "name": "speechrevolutions",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Official JavaScript/TypeScript SDK for the Speech Revolutions speech-to-text API",
   "type": "module",
   "main": "./dist/cjs/index.js",

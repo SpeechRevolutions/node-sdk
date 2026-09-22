@@ -28,7 +28,7 @@ import { SpeechRevolutions } from "speechrevolutions";
 ```ts
 import { SpeechRevolutions } from "speechrevolutions";
 
-const client = new SpeechRevolutions(); // SPEECHREVOLUTIONS_API_KEY or STT_API_KEY
+const client = new SpeechRevolutions(); // reads SPEECHREVOLUTIONS_API_KEY
 const result = await client.transcribe("meeting.mp3", { speakerLabels: true });
 
 console.log(result.text);
@@ -161,7 +161,7 @@ exponential backoff, honoring `Retry-After`. Uploads and the progress stream
 have their own retry loops.
 
 ```ts
-const client = new STTClient({
+const client = new SpeechRevolutions({
   timeout: 600,        // whole-job wait in seconds (SSE + polling)
   maxRetries: 3,       // extra attempts per API request
   retryBackoffMs: 500,
@@ -176,8 +176,6 @@ them; `RateLimitError.retryAfter` holds the server's hint in seconds.
 
 ```bash
 export SPEECHREVOLUTIONS_API_KEY=stt_...
-# or
-export STT_API_KEY=stt_...
 ```
 
 Or `new SpeechRevolutions({ apiKey: "stt_..." })` / `new SpeechRevolutions("stt_...")`.

@@ -9,7 +9,7 @@
 
 import { SpeechRevolutions } from "../dist/esm/index.js";
 
-// Reads the key from SPEECHREVOLUTIONS_API_KEY or STT_API_KEY.
+// Reads the key from SPEECHREVOLUTIONS_API_KEY.
 const client = new SpeechRevolutions();
 
 const result = await client.transcribe(

@@ -176,9 +176,12 @@ describe("base URL resolution", () => {
     delete process.env.SPEECHREVOLUTIONS_BASE_URL;
   });
 
-  test("falls back to STT_BASE_URL", () => {
-    process.env.STT_BASE_URL = "https://legacy.example";
-    assert.equal(new SpeechRevolutions({ apiKey: "k" }).baseUrl, "https://legacy.example");
+  // STT_BASE_URL predates the rebrand. Honouring it would let a stale variable
+  // silently point the client at the wrong host.
+  test("ignores the pre-rebrand STT_BASE_URL", () => {
+    delete process.env.SPEECHREVOLUTIONS_BASE_URL;
+    process.env.STT_BASE_URL = "https://stale.example";
+    assert.equal(new SpeechRevolutions({ apiKey: "k" }).baseUrl, "https://api.speechrevolutions.com");
     delete process.env.STT_BASE_URL;
   });
 

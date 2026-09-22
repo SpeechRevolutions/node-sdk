@@ -65,8 +65,8 @@ export function makeProgressEvent(
   return { ...event, percent: computePercent(event.completed, event.total) };
 }
 
-export interface STTClientOptions {
-  /** Defaults to SPEECHREVOLUTIONS_API_KEY or STT_API_KEY. */
+export interface SpeechRevolutionsOptions {
+  /** Defaults to SPEECHREVOLUTIONS_API_KEY. */
   apiKey?: string;
   baseUrl?: string;
   /** Total seconds to wait for a job (default 600). */

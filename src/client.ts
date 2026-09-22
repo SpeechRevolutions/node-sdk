@@ -22,7 +22,7 @@ import {
   type JobStatus,
   type OutputType,
   type ProgressCallback,
-  type STTClientOptions,
+  type SpeechRevolutionsOptions,
   type TranscribeOptions,
   type UploadJob,
 } from "./types.js";
@@ -111,11 +111,11 @@ function resolveApiKey(apiKey?: string): string {
   if (apiKey) return apiKey;
   const env =
     (typeof process !== "undefined" &&
-      (process.env.SPEECHREVOLUTIONS_API_KEY || process.env.STT_API_KEY)) ||
+      process.env.SPEECHREVOLUTIONS_API_KEY) ||
     undefined;
   if (env) return env;
   throw new AuthenticationError(
-    "apiKey is required (pass apiKey or set SPEECHREVOLUTIONS_API_KEY / STT_API_KEY)",
+    "apiKey is required (pass apiKey or set SPEECHREVOLUTIONS_API_KEY)",
   );
 }
 
@@ -131,7 +131,7 @@ function resolveApiKey(apiKey?: string): string {
 function resolveBaseUrl(baseUrl?: string): string {
   const env =
     (typeof process !== "undefined" &&
-      (process.env.SPEECHREVOLUTIONS_BASE_URL || process.env.STT_BASE_URL)) ||
+      process.env.SPEECHREVOLUTIONS_BASE_URL) ||
     undefined;
   return (baseUrl ?? env ?? DEFAULT_BASE_URL).replace(/\/$/, "");
 }
@@ -148,7 +148,7 @@ interface MultipartCreateResponse {
   parts: { part_number: number; url: string }[];
 }
 
-export class STTClient {
+export class SpeechRevolutions {
   readonly apiKey: string;
   readonly baseUrl: string;
   readonly timeout: number;
@@ -158,8 +158,8 @@ export class STTClient {
   private readonly requestInit: RequestInit;
   private readonly multipart: boolean;
 
-  constructor(opts: STTClientOptions | string = {}) {
-    const options: STTClientOptions =
+  constructor(opts: SpeechRevolutionsOptions | string = {}) {
+    const options: SpeechRevolutionsOptions =
       typeof opts === "string" ? { apiKey: opts } : opts ?? {};
     this.apiKey = resolveApiKey(options.apiKey);
     this.baseUrl = resolveBaseUrl(options.baseUrl);
@@ -946,6 +946,5 @@ async function readAudio(
   return { data, fileSize: data.byteLength };
 }
 
-/** @deprecated Use STTClient — alias for Deepgram / ElevenLabs naming. */
-export class SpeechRevolutions extends STTClient {}
+// SpeechRevolutionsClient matches the C# client's name.
 export { SpeechRevolutions as SpeechRevolutionsClient };
