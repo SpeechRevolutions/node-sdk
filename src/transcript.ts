@@ -121,17 +121,27 @@ function utterancesFromWords(words: Word[]): Utterance[] {
 }
 
 /**
- * Prefers the server's diarization segments, which separate turns the speaker
- * labels alone cannot (the same speaker talking twice). Falls back to grouping
- * consecutive words by speaker.
+ * Speaker turns. Built from the words whenever they carry speakers: every word
+ * lands in exactly one utterance, and consecutive words from one speaker are one
+ * turn. Built from the diarization segments instead, words that fell between
+ * segments were silently dropped and every pause split a turn in two. Segments
+ * are only the fallback, for words without speaker labels — sorted, because the
+ * service has returned them grouped by speaker.
  */
 function utterancesFromDiarization(words: Word[], diarization: unknown): Utterance[] {
-  if (!Array.isArray(diarization) || diarization.length === 0) {
+  if (
+    !Array.isArray(diarization) ||
+    diarization.length === 0 ||
+    (words.length > 0 && words.every((w) => w.speaker != null))
+  ) {
     return utterancesFromWords(words);
   }
 
   const out: Utterance[] = [];
-  for (const seg of diarization as Record<string, unknown>[]) {
+  const ordered = [...(diarization as Record<string, unknown>[])].sort(
+    (a, b) => (asNumber(a?.start) ?? 0) - (asNumber(b?.start) ?? 0),
+  );
+  for (const seg of ordered) {
     const start = asNumber(seg?.start);
     const end = asNumber(seg?.end);
     if (start === undefined || end === undefined) continue;
