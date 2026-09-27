@@ -181,6 +181,32 @@ export SPEECHREVOLUTIONS_API_KEY=stt_...
 
 Or `new SpeechRevolutions({ apiKey: "stt_..." })` / `new SpeechRevolutions("stt_...")`.
 
+## MCP server
+
+The package ships an MCP server, so an assistant can transcribe audio directly instead of
+you writing the call. Add it to any MCP client:
+
+```json
+{
+  "mcpServers": {
+    "speechrevolutions": {
+      "command": "npx",
+      "args": ["-y", "speechrevolutions", "mcp"],
+      "env": { "SPEECHREVOLUTIONS_API_KEY": "stt_..." }
+    }
+  }
+}
+```
+
+Five tools: `transcribe_audio` (short files, waits for the result), `submit_transcription_job`
+(long files, returns a job id), `check_job`, `get_transcript` and `list_jobs`.
+
+Transcripts come back as readable text with speaker labels rather than raw JSON — the caller
+is a language model, and word-level JSON for a long recording spends the context it needs to
+answer the question. Ask `get_transcript` for `format: "json"` when you actually want the
+timings.
+
+
 ## Links
 
 - [Speech Revolutions](https://www.speechrevolutions.com) — the speech-to-text API this library talks to
