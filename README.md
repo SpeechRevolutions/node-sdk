@@ -1,6 +1,6 @@
 # Speech Revolutions — JavaScript / TypeScript SDK
 
-Official JS/TS client for the Speech Revolutions STT API. Works in Node 18+
+Official JS/TS client for the [Speech Revolutions](https://www.speechrevolutions.com) speech-to-text API. Works in Node 18+
 (native `fetch`). Async-first, like Deepgram / ElevenLabs JS.
 
 Written in TypeScript, published as both CommonJS and ESM, so it works from
@@ -180,3 +180,8 @@ export SPEECHREVOLUTIONS_API_KEY=stt_...
 ```
 
 Or `new SpeechRevolutions({ apiKey: "stt_..." })` / `new SpeechRevolutions("stt_...")`.
+
+## Links
+
+- [Speech Revolutions](https://www.speechrevolutions.com) — the speech-to-text API this library talks to
+- [Documentation](https://docs.speechrevolutions.com) — API reference, guides and quickstarts

@@ -39,7 +39,7 @@
     "asr"
   ],
   "author": "Speech Revolutions",
-  "homepage": "https://speechrevolutions.com",
+  "homepage": "https://www.speechrevolutions.com",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/SpeechRevolutions/node-sdk.git"
