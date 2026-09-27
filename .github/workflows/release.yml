@@ -8,8 +8,11 @@
 # drift from the contract. CI checks it out alongside and points SR_MOCK_API at
 # it, since the sibling path only exists on a developer's machine.
 #
-# Needs secrets.NPM_TOKEN: an npm granular access token with publish rights on
-# the @speechrevolutions scope.
+# Publishes with npm Trusted Publishing (OIDC): npm trusts this repo, this
+# workflow file and the `npm` environment (configured on npmjs.com under the
+# package's Settings -> Trusted Publisher), and mints a one-use credential per
+# publish. No token is stored, so none can expire or leak. Renaming this file or
+# the environment breaks publishing until the npm side is updated to match.
 name: release
 
 on:
@@ -56,17 +59,17 @@ jobs:
     environment: npm
     permissions:
       contents: read
-      id-token: write          # lets npm attach a provenance attestation
+      id-token: write          # the OIDC token npm exchanges for publish rights
     steps:
       - uses: actions/checkout@v4
+      # No registry-url: setup-node would write an .npmrc carrying a placeholder
+      # token, and the publish must authenticate through OIDC alone.
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          registry-url: https://registry.npmjs.org
+          node-version: "22"
+      # Trusted Publishing needs npm >= 11.5.1; Node 22 ships with npm 10.
+      - run: npm install -g npm@latest && npm --version
       - run: npm ci
       - run: npm run build
-      # --access public is also set in package.json's publishConfig; a scoped
-      # package is private by default and the publish simply fails without it.
-      - run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Provenance is attached automatically under Trusted Publishing.
+      - run: npm publish --access public
