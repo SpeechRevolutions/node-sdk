@@ -325,6 +325,7 @@ export class SpeechRevolutions {
       nltk: opts.nltk,
       tier: opts.tier,
       ...(opts.customVocabulary ? { custom_vocabulary: opts.customVocabulary } : {}),
+      ...(opts.language ? { language: opts.language } : {}),
       ...(opts.callbackUrl ? { callback_url: opts.callbackUrl } : {}),
     };
   }

@@ -58,6 +58,7 @@ await client.transcribe("a.mp3", {
   outputType: "json",
   wordTimestamps: true,
   customVocabulary: ["AcmeCorp"],
+  language: "en", // omit for automatic language detection
 });
 ```
 
@@ -70,9 +71,15 @@ await client.transcribe("a.mp3", {
 | `nltk` | `boolean` (punctuation & capitalization) | `true` |
 | `tier` | `"standard"` | `"standard"` — the only tier currently available |
 | `customVocabulary` | `string[]` | `undefined` |
+| `language` | `string` (ISO 639-1, e.g. `"en"`) | `undefined` — auto-detect |
 | `onProgress` | `(event: ProgressEvent) => void` | `undefined` |
 | `onUploadProgress` | `(event: ProgressEvent) => void` | `undefined` |
 | `progress` | `boolean` (render console bars) | `false` |
+
+`language` skips language detection and transcribes the whole file in that
+language. Pinning the wrong one makes the model translate into it (Russian audio
+pinned to `"en"` comes back in English), so leave it unset unless you know the
+language. An unsupported code is rejected with HTTP 422.
 
 ## Live progress
 

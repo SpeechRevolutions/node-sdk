@@ -21,6 +21,7 @@ const result = await client.transcribe(
     nltk: true, // restore punctuation & capitalization
     tier: "standard", // processing tier: standard | economy
     customVocabulary: undefined, // string[] of domain terms to bias toward, or undefined
+    language: undefined, // ISO 639-1 code (e.g. "en") to skip detection, or undefined
     onProgress: undefined, // callback(ProgressEvent) for transcription %, or undefined
     onUploadProgress: undefined, // callback(ProgressEvent) for upload %, or undefined
     progress: true, // render live upload + transcription bars in the console

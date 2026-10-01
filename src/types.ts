@@ -11,6 +11,13 @@ export interface TranscribeOptions {
   /** Processing / pricing tier. Default: standard. */
   tier?: ProcessingTier;
   customVocabulary?: string[];
+  /**
+   * ISO 639-1 code of the spoken language (e.g. `"en"`, `"ru"`). Omit (or pass
+   * `"auto"`) for automatic language detection. When set, detection is skipped
+   * and the whole job is transcribed in that language — pinning the wrong one
+   * makes the model translate into it. An unsupported code is rejected with 422.
+   */
+  language?: string;
   /** Webhook URL POSTed a signed completion/failure notification. */
   callbackUrl?: string;
   /** Callback fired for every transcription progress event (read `event.percent`). */
@@ -95,7 +102,7 @@ export function resolveOptions(options: TranscribeOptions = {}): Required<
     "outputType" | "wordTimestamps" | "speakerLabels" | "nltk" | "tier"
   >
 > &
-  Pick<TranscribeOptions, "customVocabulary" | "callbackUrl"> {
+  Pick<TranscribeOptions, "customVocabulary" | "language" | "callbackUrl"> {
   const speakerLabels =
     options.diarize !== undefined
       ? options.diarize
@@ -109,6 +116,7 @@ export function resolveOptions(options: TranscribeOptions = {}): Required<
     nltk: options.nltk ?? true,
     tier: options.tier ?? "standard",
     customVocabulary: options.customVocabulary,
+    language: options.language,
     callbackUrl: options.callbackUrl,
   };
 }

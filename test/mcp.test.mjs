@@ -162,3 +162,16 @@ test("nothing but protocol is ever written to stdout", async () => {
   assert.equal(responses.length, 1);
   assert.match(stderr, /speechrevolutions-mcp .* ready/);
 });
+
+test("both transcription tools accept an optional language", async () => {
+  const { responses } = await exchange([
+    { jsonrpc: "2.0", id: 1, method: "initialize", params: {} },
+    { jsonrpc: "2.0", id: 2, method: "tools/list" },
+  ]);
+  const tools = responses.find((r) => r.id === 2).result.tools;
+  for (const name of ["transcribe_audio", "submit_transcription_job"]) {
+    const schema = tools.find((t) => t.name === name).inputSchema;
+    assert.equal(schema.properties.language.type, "string");
+    assert.ok(!(schema.required ?? []).includes("language"), `${name}: language must be optional`);
+  }
+});

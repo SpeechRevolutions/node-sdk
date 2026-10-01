@@ -47,6 +47,11 @@ const TRANSCRIPTION_PROPERTIES = {
     description:
       "Names, jargon or product terms that appear in the audio. Use it for words a general model would get wrong — surnames, drug names, internal codenames.",
   },
+  language: {
+    type: "string",
+    description:
+      "ISO 639-1 code of the spoken language, e.g. \"en\" or \"ru\". Omit it to detect the language automatically, which is almost always right. Only set it when you KNOW the language: a wrong code makes the model translate the audio into that language instead of transcribing it.",
+  },
 } as const;
 
 function transcriptionOptions(args: Record<string, unknown>): TranscribeOptions {
@@ -56,6 +61,8 @@ function transcriptionOptions(args: Record<string, unknown>): TranscribeOptions 
     customVocabulary: Array.isArray(args.custom_vocabulary)
       ? (args.custom_vocabulary as unknown[]).map(String)
       : undefined,
+    language:
+      typeof args.language === "string" && args.language ? args.language : undefined,
   };
 }
 
