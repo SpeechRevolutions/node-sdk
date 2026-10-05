@@ -1,6 +1,6 @@
 {
   "name": "speechrevolutions",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Official JavaScript/TypeScript SDK for the Speech Revolutions speech-to-text API",
   "type": "module",
   "main": "./dist/cjs/index.js",
@@ -34,7 +34,18 @@
   "engines": {
     "node": ">=18"
   },
-  "keywords": ["speech-to-text", "stt", "transcription", "whisper", "asr", "mcp", "model-context-protocol", "ai-agent", "diarization", "speaker-diarization"],
+  "keywords": [
+    "speech-to-text",
+    "stt",
+    "transcription",
+    "whisper",
+    "asr",
+    "mcp",
+    "model-context-protocol",
+    "ai-agent",
+    "diarization",
+    "speaker-diarization"
+  ],
   "author": "Speech Revolutions",
   "homepage": "https://www.speechrevolutions.com",
   "repository": {
