@@ -736,7 +736,7 @@ export class SpeechRevolutions {
         retryAfter: (parseRetryAfterMs(resp.headers.get("Retry-After")) ?? 0) / 1000 || undefined,
       });
     }
-    throw new APIError(`Unexpected response (HTTP ${resp.status})`, {
+    throw new APIError(unexpectedResponseMessage(resp.status, body), {
       statusCode: resp.status,
       requestId,
       body,
@@ -1008,3 +1008,30 @@ async function readAudio(
 
 // SpeechRevolutionsClient matches the C# client's name.
 export { SpeechRevolutions as SpeechRevolutionsClient };
+
+/**
+ * The message for a status with no dedicated error, saying what the server said (as the Python
+ * SDK does). "Unexpected response (HTTP 403)" alone left a caller nothing to act on: the edge
+ * firewall answers some refusals itself with a bare HTML 403 -- notably a callbackUrl or audioUrl
+ * that is not a public address -- so that case is named outright; a JSON `detail` is passed through.
+ */
+export function unexpectedResponseMessage(status: number, body: string | undefined): string {
+  let detail: unknown;
+  try {
+    detail = body ? (JSON.parse(body) as { detail?: unknown })?.detail : undefined;
+  } catch {
+    detail = undefined;
+  }
+  if (detail) {
+    return `HTTP ${status}: ${typeof detail === "string" ? detail : JSON.stringify(detail).slice(0, 300)}`;
+  }
+  if (status === 403) {
+    return (
+      "Forbidden (HTTP 403) by the API's edge firewall, before the request reached the API. " +
+      "A callbackUrl or audioUrl that is not a public internet address " +
+      "(localhost, 127.0.0.1, a private network) is refused this way."
+    );
+  }
+  const snippet = (body ?? "").replace(/<[^>]+>/g, " ").split(/\s+/).filter(Boolean).join(" ").slice(0, 200);
+  return `Unexpected response (HTTP ${status})` + (snippet ? `: ${snippet}` : "");
+}
