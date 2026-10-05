@@ -29,6 +29,40 @@ export interface Utterance {
   confidence?: number;
 }
 
+/** A word in {@link Transcript.toDeepgram}'s output. */
+export interface DeepgramWord {
+  word: string;
+  punctuated_word: string;
+  start?: number;
+  end?: number;
+  /** 0-based speaker index, as Deepgram numbers them. */
+  speaker?: number;
+}
+
+export interface DeepgramUtterance {
+  transcript: string;
+  channel: number;
+  start?: number;
+  end?: number;
+  speaker?: number;
+  words: DeepgramWord[];
+}
+
+export interface DeepgramAlternative {
+  transcript: string;
+  confidence: number;
+  words: DeepgramWord[];
+}
+
+/** The subset of Deepgram's pre-recorded response that {@link Transcript.toDeepgram} fills. */
+export interface DeepgramResponse {
+  metadata: { request_id: string; channels: number };
+  results: {
+    channels: { alternatives: DeepgramAlternative[] }[];
+    utterances: DeepgramUtterance[];
+  };
+}
+
 export interface Transcript {
   jobId: string;
   outputType: string;
@@ -45,7 +79,8 @@ export interface Transcript {
   /** Write raw content to disk (Node). Appends `.outputType` if path has no extension. */
   save(path: string): Promise<string>;
   toDict(): Record<string, unknown>;
-  toDeepgram(): Record<string, unknown>;
+  /** Deepgram's pre-recorded response shape, speakers numbered from 0. */
+  toDeepgram(): DeepgramResponse;
 }
 
 function joinWords(words: Word[]): string {
@@ -175,17 +210,24 @@ function wordsWithin(words: Word[], start: number, end: number): Word[] {
   });
 }
 
-function speakerIndex(speaker?: string): number | string | undefined {
-  if (speaker == null) return undefined;
-  if (speaker.toUpperCase().startsWith("SPEAKER_")) {
-    const n = Number(speaker.split("_")[1]);
-    return Number.isFinite(n) ? n : speaker;
-  }
-  if (speaker.length === 1 && /[a-zA-Z]/.test(speaker)) {
-    return speaker.toUpperCase().charCodeAt(0) - "A".charCodeAt(0);
-  }
-  const n = Number(speaker);
-  return Number.isFinite(n) ? n : speaker;
+/**
+ * Deepgram's speaker number for one of our labels. Deepgram counts from 0; the
+ * service labels speakers SPEAKER_1, SPEAKER_2, ... so SPEAKER_n is n - 1 (and
+ * A, B, ... are 0, 1, ...). Anything else is numbered in order of appearance.
+ */
+function speakerIndexer(): (speaker?: string) => number | undefined {
+  const seen = new Map<string, number>();
+  return (speaker) => {
+    if (speaker == null) return undefined;
+    const m = /^SPEAKER_(\d+)$/i.exec(speaker);
+    if (m) return Math.max(0, Number(m[1]) - 1);
+    if (/^[a-zA-Z]$/.test(speaker)) {
+      return speaker.toUpperCase().charCodeAt(0) - "A".charCodeAt(0);
+    }
+    if (/^\d+$/.test(speaker)) return Number(speaker);
+    if (!seen.has(speaker)) seen.set(speaker, seen.size);
+    return seen.get(speaker);
+  };
 }
 
 export function parseTranscript(opts: {
@@ -302,7 +344,8 @@ function makeTranscript(args: {
       if (args.languages.length) dict.languages = args.languages;
       return dict;
     },
-    toDeepgram() {
+    toDeepgram(): DeepgramResponse {
+      const speakerIndex = speakerIndexer();
       return {
         metadata: { request_id: args.jobId, channels: 1 },
         results: {

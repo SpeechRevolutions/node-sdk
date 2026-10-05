@@ -19,7 +19,7 @@ const result = await client.transcribe(
     wordTimestamps: true, // include per-word start/end times
     speakerLabels: true, // label who spoke each segment (alias: diarize)
     nltk: true, // restore punctuation & capitalization
-    tier: "standard", // processing tier: standard | economy
+    tier: "standard", // processing tier: "standard", the only tier currently available
     customVocabulary: undefined, // string[] of domain terms to bias toward, or undefined
     language: undefined, // ISO 639-1 code (e.g. "en") to skip detection, or undefined
     onProgress: undefined, // callback(ProgressEvent) for transcription %, or undefined

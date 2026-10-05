@@ -14,11 +14,12 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { SpeechRevolutions } from "../dist/esm/index.js";
 
 // --- 1. Submit a job with a webhook ----------------------------------------
+// submit() uploads and enqueues the job, then returns its id without waiting.
 const client = new SpeechRevolutions(); // reads SPEECHREVOLUTIONS_API_KEY
-await client.transcribe("audio.mp3", {
+const jobId = await client.submit("audio.mp3", {
   callbackUrl: "https://your-app.example.com/webhooks/speechrevolutions",
 });
-console.log("Submitted. Your callbackUrl will be POSTed when the job finishes.");
+console.log(`Submitted ${jobId}. Your callbackUrl will be POSTed when the job finishes.`);
 
 // --- 2. Verify an incoming webhook (Express handler) -----------------------
 // Compare against the RAW body bytes, using a constant-time comparison.
@@ -32,7 +33,8 @@ export function verifySignature(rawBody, signatureHeader, signingSecret) {
 
 // import express from "express";
 // const app = express();
-// const SECRET = process.env.SR_WEBHOOK_SECRET;      // same secret configured server-side
+// // Your account's webhook signing secret: console.speechrevolutions.com -> API Keys.
+// const SECRET = process.env.SPEECHREVOLUTIONS_WEBHOOK_SECRET;
 // // NOTE: capture the raw body for signature verification.
 // app.post(
 //   "/webhooks/speechrevolutions",

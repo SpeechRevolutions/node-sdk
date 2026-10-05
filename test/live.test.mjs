@@ -343,7 +343,12 @@ describe("live API", { skip: LIVE ? false : "opt-in: set SR_LIVE=1 (creates real
     const audio = audioPath();
     assert.ok(audio, "no test audio found; set SR_LIVE_AUDIO");
 
-    const result = await client().transcribe(audio, { speakerLabels: true });
+    const seen = [];
+    const result = await client().transcribe(audio, { speakerLabels: true }, (e) => seen.push(e));
+
+    // However short the clip, a finished job reports 100%.
+    assert.ok(seen.length > 0, "onProgress never fired");
+    assert.equal(seen[seen.length - 1].percent, 100);
 
     const d = result.toDict();
     for (const k of ["id", "text", "words", "utterances"]) {
@@ -352,6 +357,11 @@ describe("live API", { skip: LIVE ? false : "opt-in: set SR_LIVE=1 (creates real
 
     const dg = result.toDeepgram();
     assert.ok("results" in dg, `toDeepgram has no results key: ${Object.keys(dg)}`);
+    // Deepgram numbers speakers from 0; ours start at SPEAKER_1.
+    const speakers = dg.results.channels[0].alternatives[0].words
+      .map((w) => w.speaker)
+      .filter((x) => x !== undefined);
+    if (speakers.length) assert.equal(Math.min(...speakers), 0);
 
     const dir = await mkdtemp(path.join(tmpdir(), "sr-live-"));
     const written = await result.save(path.join(dir, "out"));

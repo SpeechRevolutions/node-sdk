@@ -22,6 +22,7 @@ import {
   type JobStatus,
   type OutputType,
   type ProgressCallback,
+  type ProgressEvent,
   type SpeechRevolutionsOptions,
   type TranscribeOptions,
   type UploadJob,
@@ -155,7 +156,7 @@ export class SpeechRevolutions {
   private readonly fetchFn: typeof fetch;
   private readonly maxRetries: number;
   private readonly retryBackoffMs: number;
-  private readonly requestInit: RequestInit;
+  private readonly requestInit: RequestInit & { dispatcher?: unknown };
   private readonly multipart: boolean;
 
   constructor(opts: SpeechRevolutionsOptions | string = {}) {
@@ -413,7 +414,11 @@ export class SpeechRevolutions {
 
   /** PUT one part to its presigned URL and return the S3 ETag. */
   private async putPart(url: string, chunk: Uint8Array): Promise<string> {
-    const resp = await this.fetchFn(url, { method: "PUT", body: toArrayBuffer(chunk) });
+    const resp = await this.fetchFn(url, {
+      ...this.storageInit(),
+      method: "PUT",
+      body: toArrayBuffer(chunk),
+    });
     if (resp.status !== 200 && resp.status !== 204) {
       throw new UploadError(`part upload failed (HTTP ${resp.status})`);
     }
@@ -507,17 +512,45 @@ export class SpeechRevolutions {
     onProgress?: ProgressCallback,
     timeout = this.timeout,
   ): Promise<{ content: Uint8Array; downloadUrl: string }> {
-    const sseUrl = await this.waitSSE(jobId, downloadUrl, onProgress, timeout);
+    // Remember the last event so completion can close it out at 100%. A short
+    // file can finish before the stream has reported anything, and a stream can
+    // end on 90%: either way a caller's UI is left short of done.
+    const start = Date.now();
+    let last: ProgressEvent | undefined;
+    const track: ProgressCallback | undefined = onProgress
+      ? (event) => {
+          last = event;
+          onProgress(event);
+        }
+      : undefined;
+
+    let result: { content: Uint8Array; downloadUrl: string };
+    const sseUrl = await this.waitSSE(jobId, downloadUrl, track, timeout);
     if (sseUrl === null) {
       const content = await this.waitPoll(jobId, downloadUrl, timeout);
-      return { content, downloadUrl };
+      result = { content, downloadUrl };
+    } else {
+      const content = await this.downloadResult(sseUrl);
+      result = { content, downloadUrl: sseUrl };
     }
-    const content = await this.downloadResult(sseUrl);
-    return { content, downloadUrl: sseUrl };
+
+    if (onProgress && last?.percent !== 100) {
+      const total = last?.total || 1;
+      onProgress(
+        makeProgressEvent({
+          completed: total,
+          total,
+          step: "completed",
+          elapsedSeconds: (Date.now() - start) / 1000,
+          raw: { completed: total, total, step: "completed" },
+        }),
+      );
+    }
+    return result;
   }
 
   async downloadResult(downloadUrl: string): Promise<Uint8Array> {
-    const resp = await this.fetchFn(downloadUrl);
+    const resp = await this.fetchFn(downloadUrl, this.storageInit());
     if (!resp.ok) {
       throw new APIError(`Download failed (HTTP ${resp.status})`, {
         statusCode: resp.status,
@@ -607,6 +640,22 @@ export class SpeechRevolutions {
   }
 
   // internals
+
+  /**
+   * `requestInit` for a presigned storage URL (upload PUTs, result downloads).
+   *
+   * Storage traffic has to take the same route as API traffic — a proxy that only
+   * carried the API calls left uploads and downloads trying to go direct, which is
+   * exactly what an egress-restricted network blocks. But the URL is signed for a
+   * third-party bucket: the caller's headers (which may hold gateway credentials)
+   * are dropped, and the API key is never added. Only transport options —
+   * `dispatcher`, `signal` and the like — carry over.
+   */
+  private storageInit(): RequestInit {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { headers: _callerHeaders, ...transport } = this.requestInit;
+    return transport;
+  }
 
   private headers(extra?: Record<string, string>): Record<string, string> {
     return {
@@ -707,6 +756,7 @@ export class SpeechRevolutions {
       // Transfer-Encoding: chunked (which S3 rejects); `duplex: "half"` is
       // required by Node when the body is a stream / async iterable.
       const init = {
+        ...this.storageInit(),
         method: "PUT",
         headers: {
           "Content-Type": contentType,
@@ -718,6 +768,7 @@ export class SpeechRevolutions {
       resp = await this.fetchFn(uploadUrl, init as unknown as RequestInit);
     } else {
       resp = await this.fetchFn(uploadUrl, {
+        ...this.storageInit(),
         method: "PUT",
         headers: { "Content-Type": contentType },
         body: toArrayBuffer(data),
@@ -794,16 +845,24 @@ export class SpeechRevolutions {
       const controller = new AbortController();
       const remainingMs = Math.max(1000, (timeout - elapsed) * 1000);
       const timer = setTimeout(() => controller.abort(), remainingMs);
+      // The caller's own signal still cancels the wait; ours only bounds it.
+      const callerSignal = this.requestInit.signal;
+      if (callerSignal?.aborted) throw callerSignal.reason ?? new DOMException("Aborted", "AbortError");
+      const onCallerAbort = () => controller.abort(callerSignal?.reason);
+      callerSignal?.addEventListener("abort", onCallerAbort, { once: true });
       try {
         resp = await this.fetchFn(`${this.baseUrl}/api/v1/jobs/${jobId}/stream`, {
+          ...this.requestInit,
           method: "GET",
           headers,
           signal: controller.signal,
         });
       } finally {
         clearTimeout(timer);
+        callerSignal?.removeEventListener("abort", onCallerAbort);
       }
-    } catch {
+    } catch (err) {
+      if (this.requestInit.signal?.aborted) throw err;
       return { outcome: "reconnect", lastEventId };
     }
 
@@ -883,7 +942,7 @@ export class SpeechRevolutions {
       }
 
       try {
-        const resp = await this.fetchFn(downloadUrl);
+        const resp = await this.fetchFn(downloadUrl, this.storageInit());
         if (resp.ok) return new Uint8Array(await resp.arrayBuffer());
       } catch {
         // ignore probe errors

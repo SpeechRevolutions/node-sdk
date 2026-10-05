@@ -12,6 +12,7 @@
  * detail stays one `get_transcript` call away with `format: "json"`.
  */
 
+import { renderCaptions } from "../captions.js";
 import type { SpeechRevolutionsClient } from "../client.js";
 import type { Transcript } from "../transcript.js";
 import type { OutputType, TranscribeOptions } from "../types.js";
@@ -246,12 +247,29 @@ export function buildTools(client: SpeechRevolutionsClient): ToolDefinition[] {
         const jobId = String(args.job_id ?? "");
         const format = String(args.format ?? "text");
         const maxChars = Number(args.max_characters ?? 20000);
-        const outputType: OutputType = format === "text" ? "json" : (format as OutputType);
+        // The stored result is in whatever format the job was submitted with (JSON for
+        // every job this server makes), so subtitles are rendered here from the words
+        // rather than handing back the JSON under an "srt" label.
+        const captions = format === "srt" || format === "vtt";
+        const outputType: OutputType = format === "text" || captions ? "json" : (format as OutputType);
         const transcript = await client.getTranscript(jobId, { outputType });
 
         if (format === "text") return text(renderTranscript(transcript, maxChars));
 
-        const raw = new TextDecoder().decode(transcript.content);
+        let raw = new TextDecoder().decode(transcript.content);
+        if (captions) {
+          const timed = transcript.words.some((w) => w.start !== undefined && w.end !== undefined);
+          if (timed) {
+            raw = renderCaptions(transcript.words, format);
+          } else if (!(format === "vtt" ? /^WEBVTT/ : /^\d+\r?\n\d\d:/).test(raw.trimStart())) {
+            // Already captions (a job submitted as srt/vtt) pass through; anything else
+            // has no word timings to build cues from.
+            return text(
+              `Job ${jobId} has no word timestamps, so it cannot be rendered as ${format}. ` +
+                `Submit it again with word_timestamps enabled, or ask for format "text".`,
+            );
+          }
+        }
         return text(
           raw.length <= maxChars
             ? raw

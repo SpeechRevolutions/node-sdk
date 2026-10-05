@@ -85,9 +85,14 @@ export interface SpeechRevolutionsOptions {
   retryBackoffMs?: number;
   /**
    * Extra `fetch` init merged into every request — the idiomatic proxy hook in
-   * Node: pass `{ dispatcher: new ProxyAgent(url) }` (from `undici`).
+   * Node: pass `{ dispatcher: new ProxyAgent(url) }` (from `undici`). Applied to
+   * API calls, the progress stream, and storage uploads/downloads (which get the
+   * transport options only, never `headers`).
+   *
+   * `dispatcher` is declared here because Node's fetch accepts it while the
+   * standard `RequestInit` type does not.
    */
-  requestInit?: RequestInit;
+  requestInit?: RequestInit & { dispatcher?: unknown };
   /**
    * Prefer S3 multipart uploads and fall back to a single presigned PUT if the
    * server has multipart disabled or a multipart upload fails mid-flight.

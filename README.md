@@ -33,16 +33,18 @@ const result = await client.transcribe("meeting.mp3", { speakerLabels: true });
 
 console.log(result.text);
 for (const u of result.utterances) {
-  console.log(`Speaker ${u.speaker}: ${u.text}`);
+  console.log(`${u.speaker}: ${u.text}`); // e.g. "SPEAKER_1: Hello."
 }
 ```
 
 ### From a URL (Deepgram-style)
 
 ```ts
-const result = await client.transcribeUrl("https://example.com/audio.mp3");
+const result = await client.transcribeUrl(
+  "https://docs.speechrevolutions.com/samples/diamond-necklace.mp3",
+);
 // or, since transcribe() detects http(s) URLs:
-// const result = await client.transcribe("https://example.com/audio.mp3");
+// const result = await client.transcribe("https://docs.speechrevolutions.com/samples/diamond-necklace.mp3");
 ```
 
 The platform fetches the URL itself — the audio never passes through your
@@ -53,7 +55,7 @@ process.
 Pass options as the second argument. `diarize` is an alias for `speakerLabels`.
 
 ```ts
-await client.transcribe("a.mp3", {
+await client.transcribe("meeting.mp3", {
   diarize: true, // alias for speakerLabels
   outputType: "json",
   wordTimestamps: true,
@@ -107,7 +109,9 @@ await client.transcribe("meeting.mp3", {
 
 `progress: true` and the callbacks compose — the bars render *and* your
 callbacks still fire for every event. `event.percent` is a `0–100` number,
-`undefined` when the total is not yet known.
+`undefined` when the total is not yet known. When the job completes, `onProgress`
+always receives a final event at `100` (`event.step === "completed"`), even for a
+short file that finished before reporting any progress.
 
 The upload is streamed in chunks with an explicit `Content-Length` (so presigned
 S3 PUTs never see `Transfer-Encoding: chunked`), and progress is reported after
@@ -128,13 +132,23 @@ Default `outputType` is `json`. The SDK parses it into a transcript-first object
 | `result.content` / `result.save()` | raw bytes / file |
 
 ```ts
+import { SpeechRevolutions } from "speechrevolutions";
+
+const client = new SpeechRevolutions();
+const result = await client.transcribe("meeting.mp3");
+
+// Deepgram's response shape (typed as DeepgramResponse); speakers are numbered from 0.
 const dg = result.toDeepgram();
 console.log(dg.results.channels[0].alternatives[0].transcript);
 
 // Save raw content to disk. Appends the output type if the path has no
 // extension, e.g. "output" -> "output.json". Returns the written path.
 const path = await result.save("output");
+console.log(`saved ${path}`);
 ```
+
+`toDeepgram()` numbers speakers from 0, as Deepgram does: `SPEAKER_1` becomes speaker `0`,
+`SPEAKER_2` speaker `1`. (Before 1.0.0 it kept our 1-based numbers.)
 
 ## Webhooks & retrieving results later
 
@@ -145,8 +159,8 @@ bytes) or by polling:
 
 ```ts
 const jobId = await client.submit("meeting.mp3");  // returns immediately, no waiting
-// ...or notify a webhook instead of polling:
-await client.transcribe("meeting.mp3", { callbackUrl: "https://you.example.com/hook" });
+// ...or have a webhook notified instead of polling:
+await client.submit("meeting.mp3", { callbackUrl: "https://you.example.com/hook" });
 
 const status = await client.getJobStatus(jobId);   // .status: processing|completed|failed
 if (status.status === "completed") {
@@ -164,9 +178,24 @@ for Python, Node, Go and C# are in the
 
 ## Robustness
 
-`new SpeechRevolutions({ maxRetries: 3, retryBackoffMs: 500, requestInit: { dispatcher } })`.
 Transient 429/5xx/network errors are retried (honoring `Retry-After`). Errors are
 typed and carry `.statusCode` and `.requestId`.
+
+Behind an HTTP proxy, pass an undici `dispatcher` through `requestInit`. It is used for
+every request — API calls, the progress stream, and the audio upload and result
+download, which go to presigned storage URLs:
+
+```ts
+import { ProxyAgent } from "undici"; // npm install undici
+import { SpeechRevolutions } from "speechrevolutions";
+
+const client = new SpeechRevolutions({
+  requestInit: { dispatcher: new ProxyAgent("http://proxy.internal:3128") },
+});
+```
+
+Storage requests get the transport options only: your API key and any `headers` you put
+in `requestInit` are never sent to a storage URL.
 
 ## Timeouts and retries
 
@@ -218,7 +247,8 @@ Five tools: `transcribe_audio` (short files, waits for the result), `submit_tran
 Transcripts come back as readable text with speaker labels rather than raw JSON — the caller
 is a language model, and word-level JSON for a long recording spends the context it needs to
 answer the question. Ask `get_transcript` for `format: "json"` when you actually want the
-timings.
+timings, or `"srt"` / `"vtt"` for subtitles (phrase-length cues, at most two lines of 42
+characters, never spanning two speakers).
 
 
 ## Links
