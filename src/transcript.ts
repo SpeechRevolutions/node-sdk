@@ -35,8 +35,8 @@ export interface DeepgramWord {
   punctuated_word: string;
   start?: number;
   end?: number;
-  /** 0-based speaker index, as Deepgram numbers them. */
-  speaker?: number;
+  /** 0-based speaker index, as Deepgram numbers them (an unrecognised label passes through). */
+  speaker?: number | string;
 }
 
 export interface DeepgramUtterance {
@@ -44,7 +44,7 @@ export interface DeepgramUtterance {
   channel: number;
   start?: number;
   end?: number;
-  speaker?: number;
+  speaker?: number | string;
   words: DeepgramWord[];
 }
 
@@ -213,21 +213,17 @@ function wordsWithin(words: Word[], start: number, end: number): Word[] {
 /**
  * Deepgram's speaker number for one of our labels. Deepgram counts from 0; the
  * service labels speakers SPEAKER_1, SPEAKER_2, ... so SPEAKER_n is n - 1 (and
- * A, B, ... are 0, 1, ...). Anything else is numbered in order of appearance.
+ * A, B, ... are 0, 1, ...). A label that is none of these passes through unchanged.
  */
-function speakerIndexer(): (speaker?: string) => number | undefined {
-  const seen = new Map<string, number>();
-  return (speaker) => {
-    if (speaker == null) return undefined;
-    const m = /^SPEAKER_(\d+)$/i.exec(speaker);
-    if (m) return Math.max(0, Number(m[1]) - 1);
-    if (/^[a-zA-Z]$/.test(speaker)) {
-      return speaker.toUpperCase().charCodeAt(0) - "A".charCodeAt(0);
-    }
-    if (/^\d+$/.test(speaker)) return Number(speaker);
-    if (!seen.has(speaker)) seen.set(speaker, seen.size);
-    return seen.get(speaker);
-  };
+function speakerIndex(speaker?: string): number | string | undefined {
+  if (speaker == null) return undefined;
+  const m = /^SPEAKER_(\d+)$/i.exec(speaker);
+  if (m) return Math.max(0, Number(m[1]) - 1);
+  if (/^[a-zA-Z]$/.test(speaker)) {
+    return speaker.toUpperCase().charCodeAt(0) - "A".charCodeAt(0);
+  }
+  if (/^\d+$/.test(speaker)) return Number(speaker);
+  return speaker;
 }
 
 export function parseTranscript(opts: {
@@ -345,7 +341,6 @@ function makeTranscript(args: {
       return dict;
     },
     toDeepgram(): DeepgramResponse {
-      const speakerIndex = speakerIndexer();
       return {
         metadata: { request_id: args.jobId, channels: 1 },
         results: {

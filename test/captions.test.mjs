@@ -79,13 +79,15 @@ describe("toDeepgram", () => {
           words: [
             { word: "Hi.", start: 0, end: 1, speaker: "SPEAKER_1" },
             { word: "Yo.", start: 1, end: 2, speaker: "SPEAKER_2" },
+            { word: "Hm.", start: 2, end: 3, speaker: "narrator" },
           ],
         }),
       ),
     });
     const dg = t.toDeepgram();
-    assert.deepEqual(dg.results.channels[0].alternatives[0].words.map((x) => x.speaker), [0, 1]);
-    assert.deepEqual(dg.results.utterances.map((u) => u.speaker), [0, 1]);
-    assert.equal(dg.results.channels[0].alternatives[0].transcript, "Hi. Yo.");
+    assert.deepEqual(dg.results.channels[0].alternatives[0].words.map((x) => x.speaker), [0, 1, "narrator"]);
+    // An unrecognised label passes through unchanged.
+    assert.deepEqual(dg.results.utterances.map((u) => u.speaker), [0, 1, "narrator"]);
+    assert.equal(dg.results.channels[0].alternatives[0].transcript, "Hi. Yo. Hm.");
   });
 });
