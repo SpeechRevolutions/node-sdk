@@ -26,3 +26,6 @@ export type {
   TranscribeOptions,
   UploadJob,
 } from "./types.js";
+
+export { StreamSession, toEvent, sessionUpdate } from "./streaming.js";
+export type { StreamEvent, StreamOptions } from "./streaming.js";

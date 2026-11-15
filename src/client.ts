@@ -1,3 +1,4 @@
+import { openStream, type StreamOptions, type StreamSession } from "./streaming.js";
 import {
   APIError,
   AuthenticationError,
@@ -150,6 +151,13 @@ interface MultipartCreateResponse {
 }
 
 export class SpeechRevolutions {
+  /**
+   * A realtime transcription session over WebSocket (see ./streaming.ts). Needs `npm install ws`.
+   */
+  stream(opts: StreamOptions = {}): Promise<StreamSession> {
+    return openStream(this.baseUrl, this.apiKey, opts, USER_AGENT);
+  }
+
   readonly apiKey: string;
   readonly baseUrl: string;
   readonly timeout: number;
