@@ -20,6 +20,22 @@ export interface TranscribeOptions {
   language?: string;
   /** Webhook URL POSTed a signed completion/failure notification. */
   callbackUrl?: string;
+  /** Your own id for the person the audio belongs to (automatic per-user vocabulary, when enabled). */
+  endUserId?: string;
+  /** Replace PII in the transcript, timings kept. */
+  redactPii?: boolean;
+  /** email_address, phone_number, credit_card_number, us_social_security_number, ip_address (default: all). */
+  redactPiiPolicies?: string[];
+  /** "entity_name" (default, e.g. [PHONE_NUMBER]) or "hash" (####). */
+  redactPiiSub?: "entity_name" | "hash";
+  /** JSON output gains `entities` [{entity_type, text, start, end}]. */
+  entityDetection?: boolean;
+  /** Mask profanity ("f***"). */
+  filterProfanity?: boolean;
+  /** JSON output gains `paragraphs` [{start, end, speaker, text, sentences}]. */
+  paragraphs?: boolean;
+  /** Keep fillers and false starts (verbatim). Omit for the account's default style. */
+  verbatim?: boolean;
   /** Callback fired for every transcription progress event (read `event.percent`). */
   onProgress?: ProgressCallback;
   /** Callback fired for byte-level upload progress (`event.step === "upload"`). */
@@ -107,7 +123,7 @@ export function resolveOptions(options: TranscribeOptions = {}): Required<
     "outputType" | "wordTimestamps" | "speakerLabels" | "nltk" | "tier"
   >
 > &
-  Pick<TranscribeOptions, "customVocabulary" | "language" | "callbackUrl"> {
+  Pick<TranscribeOptions, "customVocabulary" | "language" | "callbackUrl" | "endUserId" | "redactPii" | "redactPiiPolicies" | "redactPiiSub" | "entityDetection" | "filterProfanity" | "paragraphs" | "verbatim"> {
   const speakerLabels =
     options.diarize !== undefined
       ? options.diarize
@@ -123,5 +139,13 @@ export function resolveOptions(options: TranscribeOptions = {}): Required<
     customVocabulary: options.customVocabulary,
     language: options.language,
     callbackUrl: options.callbackUrl,
+    endUserId: options.endUserId,
+    redactPii: options.redactPii,
+    redactPiiPolicies: options.redactPiiPolicies,
+    redactPiiSub: options.redactPiiSub,
+    entityDetection: options.entityDetection,
+    filterProfanity: options.filterProfanity,
+    paragraphs: options.paragraphs,
+    verbatim: options.verbatim,
   };
 }

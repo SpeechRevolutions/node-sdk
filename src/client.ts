@@ -328,6 +328,14 @@ export class SpeechRevolutions {
       ...(opts.customVocabulary ? { custom_vocabulary: opts.customVocabulary } : {}),
       ...(opts.language ? { language: opts.language } : {}),
       ...(opts.callbackUrl ? { callback_url: opts.callbackUrl } : {}),
+      ...(opts.endUserId ? { end_user_id: opts.endUserId } : {}),
+      ...(opts.redactPii ? { redact_pii: true } : {}),
+      ...(opts.redactPii && opts.redactPiiPolicies ? { redact_pii_policies: opts.redactPiiPolicies } : {}),
+      ...(opts.redactPii && opts.redactPiiSub ? { redact_pii_sub: opts.redactPiiSub } : {}),
+      ...(opts.entityDetection ? { entity_detection: true } : {}),
+      ...(opts.filterProfanity ? { filter_profanity: true } : {}),
+      ...(opts.paragraphs ? { paragraphs: true } : {}),
+      ...(opts.verbatim !== undefined ? { verbatim: opts.verbatim } : {}),
     };
   }
 
@@ -576,6 +584,11 @@ export class SpeechRevolutions {
   }
 
   // retrieval (get by id / list)
+
+  /** Delete a job's stored transcripts now (otherwise purged after 24 h). The usage record is kept. */
+  async deleteJob(jobId: string): Promise<void> {
+    await this.apiRequest("DELETE", `/api/v1/jobs/${encodeURIComponent(jobId)}`);
+  }
 
   /** Fetch a job's current status (and a fresh download URL once complete). */
   async getJobStatus(jobId: string): Promise<JobStatus> {
