@@ -335,6 +335,7 @@ export class SpeechRevolutions {
       ...(opts.entityDetection ? { entity_detection: true } : {}),
       ...(opts.filterProfanity ? { filter_profanity: true } : {}),
       ...(opts.paragraphs ? { paragraphs: true } : {}),
+      ...(opts.speakerNames ? { speaker_names: true } : {}),
       ...(opts.verbatim !== undefined ? { verbatim: opts.verbatim } : {}),
     };
   }
