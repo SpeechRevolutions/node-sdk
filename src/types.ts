@@ -36,6 +36,10 @@ export interface TranscribeOptions {
   paragraphs?: boolean;
   /** JSON output gains `speaker_names` {"SPEAKER_1": "Alice"} when the conversation establishes who is who. */
   speakerNames?: boolean;
+  /** JSON output gains `summary` {text, bullets}. */
+  summarize?: boolean;
+  /** JSON output gains `chapters` [{start, end, headline, gist}]. */
+  autoChapters?: boolean;
   /** Keep fillers and false starts (verbatim). Omit for the account's default style. */
   verbatim?: boolean;
   /** Callback fired for every transcription progress event (read `event.percent`). */
@@ -125,7 +129,7 @@ export function resolveOptions(options: TranscribeOptions = {}): Required<
     "outputType" | "wordTimestamps" | "speakerLabels" | "nltk" | "tier"
   >
 > &
-  Pick<TranscribeOptions, "customVocabulary" | "language" | "callbackUrl" | "endUserId" | "redactPii" | "redactPiiPolicies" | "redactPiiSub" | "entityDetection" | "filterProfanity" | "paragraphs" | "speakerNames" | "verbatim"> {
+  Pick<TranscribeOptions, "customVocabulary" | "language" | "callbackUrl" | "endUserId" | "redactPii" | "redactPiiPolicies" | "redactPiiSub" | "entityDetection" | "filterProfanity" | "paragraphs" | "speakerNames" | "summarize" | "autoChapters" | "verbatim"> {
   const speakerLabels =
     options.diarize !== undefined
       ? options.diarize
@@ -149,6 +153,8 @@ export function resolveOptions(options: TranscribeOptions = {}): Required<
     filterProfanity: options.filterProfanity,
     paragraphs: options.paragraphs,
     speakerNames: options.speakerNames,
+    summarize: options.summarize,
+    autoChapters: options.autoChapters,
     verbatim: options.verbatim,
   };
 }
