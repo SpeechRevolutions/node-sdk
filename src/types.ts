@@ -42,6 +42,10 @@ export interface TranscribeOptions {
   autoChapters?: boolean;
   /** Keep fillers and false starts (verbatim). Omit for the account's default style. */
   verbatim?: boolean;
+  /** Keep repeated words ("you know, you know") while still removing fillers. Defaults to `verbatim`. */
+  keepRepeats?: boolean;
+  /** Favor the main model's reading of names when the models disagree. Default off. */
+  conservativeVote?: boolean;
   /** Callback fired for every transcription progress event (read `event.percent`). */
   onProgress?: ProgressCallback;
   /** Callback fired for byte-level upload progress (`event.step === "upload"`). */
@@ -129,7 +133,7 @@ export function resolveOptions(options: TranscribeOptions = {}): Required<
     "outputType" | "wordTimestamps" | "speakerLabels" | "nltk" | "tier"
   >
 > &
-  Pick<TranscribeOptions, "customVocabulary" | "language" | "callbackUrl" | "endUserId" | "redactPii" | "redactPiiPolicies" | "redactPiiSub" | "entityDetection" | "filterProfanity" | "paragraphs" | "speakerNames" | "summarize" | "autoChapters" | "verbatim"> {
+  Pick<TranscribeOptions, "customVocabulary" | "language" | "callbackUrl" | "endUserId" | "redactPii" | "redactPiiPolicies" | "redactPiiSub" | "entityDetection" | "filterProfanity" | "paragraphs" | "speakerNames" | "summarize" | "autoChapters" | "verbatim" | "keepRepeats" | "conservativeVote"> {
   const speakerLabels =
     options.diarize !== undefined
       ? options.diarize
@@ -156,5 +160,7 @@ export function resolveOptions(options: TranscribeOptions = {}): Required<
     summarize: options.summarize,
     autoChapters: options.autoChapters,
     verbatim: options.verbatim,
+    keepRepeats: options.keepRepeats,
+    conservativeVote: options.conservativeVote,
   };
 }

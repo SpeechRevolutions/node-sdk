@@ -347,6 +347,8 @@ export class SpeechRevolutions {
       ...(opts.summarize ? { summarize: true } : {}),
       ...(opts.autoChapters ? { auto_chapters: true } : {}),
       ...(opts.verbatim !== undefined ? { verbatim: opts.verbatim } : {}),
+      ...(opts.keepRepeats !== undefined ? { keep_repeats: opts.keepRepeats } : {}),
+      ...(opts.conservativeVote !== undefined ? { conservative_vote: opts.conservativeVote } : {}),
     };
   }
 
