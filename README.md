@@ -11,6 +11,7 @@ type definitions either way.
 
 ```bash
 npm install speechrevolutions
+npm install ws        # for real-time streaming on Node 18/20 (Node 22+ needs nothing extra)
 ```
 
 ```js
@@ -68,11 +69,16 @@ await client.transcribe("meeting.mp3", {
 |--------|------|---------|
 | `outputType` | `"txt" \| "json" \| "srt" \| "vtt" \| "docx" \| "pdf"` | `"json"` |
 | `wordTimestamps` | `boolean` | `true` |
-| `speakerLabels` | `boolean` | `true` |
+| `speakerLabels` | `boolean` (diarization, +$0.02/hr) | `false` |
 | `diarize` | `boolean` (alias for `speakerLabels`) | — |
+| `summarize` | `boolean` (`result.summary`, +$0.02/hr) | `false` |
+| `filterProfanity` | `boolean` (`s***`, +$0.01/hr) | `false` |
+| `paragraphs` | `boolean` (`result.paragraphs`, free) | `false` |
+| `verbatim` | `boolean` (keep fillers and false starts) | server default |
+| `extra` | `Record<string, unknown>` (any other API option, as named in the API) | `undefined` |
 | `nltk` | `boolean` (punctuation & capitalization) | `true` |
 | `tier` | `"standard"` | `"standard"` — the only tier currently available |
-| `customVocabulary` | `string[]` | `undefined` |
+| `customVocabulary` | `string[]` (keyterms, +$0.05/hr) | `undefined` |
 | `language` | `string` (ISO 639-1, e.g. `"en"`) | `undefined` — auto-detect |
 | `onProgress` | `(event: ProgressEvent) => void` | `undefined` |
 | `onUploadProgress` | `(event: ProgressEvent) => void` | `undefined` |
@@ -149,6 +155,56 @@ console.log(`saved ${path}`);
 
 `toDeepgram()` numbers speakers from 0, as Deepgram does: `SPEAKER_1` becomes speaker `0`,
 `SPEAKER_2` speaker `1`. (Before 1.0.0 it kept our 1-based numbers.)
+
+Batch is $0.09 per audio hour; the add-ons above are charged per audio hour only when turned on.
+`result.summary` (`{ text, bullets }`) and `result.paragraphs` (`{ text, speaker, start, end,
+sentences }`) are set when requested. `await client.deleteJob(jobId)` deletes a job's transcripts
+before the automatic purge.
+
+## Real-time streaming
+
+Real-time transcription over WebSocket, $0.15 per session hour (early access). Audio is PCM16
+mono 16 kHz. On Node 18/20 install `ws`; Node 22+ works as is.
+
+```ts
+import { SpeechRevolutions } from "speechrevolutions";
+
+const client = new SpeechRevolutions();
+const session = await client.stream({
+  language: "en", // or languages: ["en", "ja"], or omit to detect
+  vocabulary: ["Northwind"],
+  onEvent: (e) => {
+    if (e.type === "transcription.partial") process.stdout.write(`\r${e.text}`);
+    if (e.type === "final") console.log(`\n[${e.start}-${e.end}] ${e.text}`);
+  },
+});
+
+for await (const chunk of microphone()) session.sendAudio(chunk); // PCM16 mono 16 kHz
+const result = await session.finish(); // waits for transcription.done
+console.log(result.text);
+```
+
+| Event | Fields |
+|---|---|
+| `session.created` | `jobId` |
+| `transcription.partial` | `index`, `text`, `stable` (`text.slice(0, stable)` is settled), `audioS` |
+| `final` | `index`, `text`, `start`, `end` |
+| `final.revised` | `index`, `text`: a better version of an earlier final |
+| `speech.started` / `turn.ended` | `audioS` / `index`, `start`, `end`, `probability`, `forced` |
+| `language.detected` | `language`, `index` |
+| `transcription.done` | `text` |
+| `error` | `code`, `message` |
+
+- `for await (const e of session)` reads the same events as `onEvent`.
+- `turnDetection: { threshold: 0.5, max_silence_ms: 800 }` tunes when a turn ends;
+  `session.endTurn()` ends one now (push-to-talk).
+- **Dropped connections are handled:** the session keeps unacknowledged audio, reconnects with
+  its job id for up to 60 s, and replays it. The result comes back complete under the same `jobId`.
+- `await client.streamFile("call.mp3", { language: "en" })` streams a recording in real time
+  (Node; ffmpeg converts other formats). For recordings in production, `transcribe` is faster and
+  cheaper.
+- Audio must arrive in real time: the server takes at most about 10 seconds ahead of the clock.
+- In a browser, the API key would go in the URL, so don't stream from a browser with a secret key.
 
 ## Webhooks & retrieving results later
 

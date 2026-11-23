@@ -1,6 +1,6 @@
 {
   "name": "speechrevolutions",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Official JavaScript/TypeScript SDK for the Speech Revolutions speech-to-text API",
   "type": "module",
   "main": "./dist/cjs/index.js",
@@ -44,7 +44,9 @@
     "model-context-protocol",
     "ai-agent",
     "diarization",
-    "speaker-diarization"
+    "speaker-diarization",
+    "streaming",
+    "real-time"
   ],
   "author": "Speech Revolutions",
   "homepage": "https://www.speechrevolutions.com",
@@ -61,6 +63,16 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "typescript": "^5.3.0"
+    "@types/ws": "^8.18.2",
+    "typescript": "^5.3.0",
+    "ws": "^8.23.0"
+  },
+  "peerDependencies": {
+    "ws": ">=8"
+  },
+  "peerDependenciesMeta": {
+    "ws": {
+      "optional": true
+    }
   }
 }

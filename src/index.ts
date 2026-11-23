@@ -3,12 +3,22 @@ export {
   SpeechRevolutionsClient,
 } from "./client.js";
 export * from "./exceptions.js";
+export {
+  LiveSession,
+  StreamError,
+  loadPcm16,
+  MAX_LEAD_MS,
+} from "./streaming.js";
+export type { StreamEvent, StreamFinal, StreamOptions, StreamResult } from "./streaming.js";
 export type {
   DeepgramAlternative,
   DeepgramResponse,
   DeepgramUtterance,
   DeepgramWord,
   LanguageSegment,
+  Paragraph,
+  Sentence,
+  Summary,
   Transcript,
   Utterance,
   Word,

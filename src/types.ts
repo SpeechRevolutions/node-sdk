@@ -4,6 +4,7 @@ export type ProcessingTier = "standard" | "economy";
 export interface TranscribeOptions {
   outputType?: OutputType;
   wordTimestamps?: boolean;
+  /** Speaker diarization. An add-on (+$0.02 per audio hour), so off unless set. */
   speakerLabels?: boolean;
   /** Alias for speakerLabels (ElevenLabs / Deepgram). */
   diarize?: boolean;
@@ -20,6 +21,16 @@ export interface TranscribeOptions {
   language?: string;
   /** Webhook URL POSTed a signed completion/failure notification. */
   callbackUrl?: string;
+  /** Add-on: a summary (`transcript.summary`). +$0.02 per audio hour. */
+  summarize?: boolean;
+  /** Add-on: strong profanity masked ("s***") in every output format. +$0.01 per audio hour. */
+  filterProfanity?: boolean;
+  /** Speaker-aware paragraphs in the JSON output (`transcript.paragraphs`). Free. */
+  paragraphs?: boolean;
+  /** Keep (true) or drop (false) fillers and false starts. Omit for the server default. */
+  verbatim?: boolean;
+  /** Any other API option, sent as given (snake_case, as the API names it). */
+  extra?: Record<string, unknown>;
   /** Callback fired for every transcription progress event (read `event.percent`). */
   onProgress?: ProgressCallback;
   /** Callback fired for byte-level upload progress (`event.step === "upload"`). */
@@ -107,13 +118,23 @@ export function resolveOptions(options: TranscribeOptions = {}): Required<
     "outputType" | "wordTimestamps" | "speakerLabels" | "nltk" | "tier"
   >
 > &
-  Pick<TranscribeOptions, "customVocabulary" | "language" | "callbackUrl"> {
+  Pick<
+    TranscribeOptions,
+    | "customVocabulary"
+    | "language"
+    | "callbackUrl"
+    | "summarize"
+    | "filterProfanity"
+    | "paragraphs"
+    | "verbatim"
+    | "extra"
+  > {
   const speakerLabels =
     options.diarize !== undefined
       ? options.diarize
       : options.speakerLabels !== undefined
         ? options.speakerLabels
-        : true;
+        : false;
   return {
     outputType: options.outputType ?? "json",
     wordTimestamps: options.wordTimestamps ?? true,
@@ -123,5 +144,10 @@ export function resolveOptions(options: TranscribeOptions = {}): Required<
     customVocabulary: options.customVocabulary,
     language: options.language,
     callbackUrl: options.callbackUrl,
+    summarize: options.summarize,
+    filterProfanity: options.filterProfanity,
+    paragraphs: options.paragraphs,
+    verbatim: options.verbatim,
+    extra: options.extra,
   };
 }

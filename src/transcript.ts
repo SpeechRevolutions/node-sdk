@@ -63,6 +63,27 @@ export interface DeepgramResponse {
   };
 }
 
+/** The `summarize` add-on: a short summary and its key points. */
+export interface Summary {
+  text: string;
+  bullets: string[];
+}
+
+export interface Sentence {
+  text: string;
+  start?: number;
+  end?: number;
+}
+
+/** A speaker-aware paragraph (the `paragraphs` option). */
+export interface Paragraph {
+  text: string;
+  speaker?: string;
+  start?: number;
+  end?: number;
+  sentences: Sentence[];
+}
+
 export interface Transcript {
   jobId: string;
   outputType: string;
@@ -72,6 +93,10 @@ export interface Transcript {
   utterances: Utterance[];
   languages: LanguageSegment[];
   raw: Record<string, unknown> | null;
+  /** Present when the request asked for `summarize`. */
+  summary?: Summary;
+  /** Present when the request asked for `paragraphs`. */
+  paragraphs: Paragraph[];
   /** Full transcript text (AssemblyAI / ElevenLabs-style). */
   readonly text: string;
   /** Deepgram-compatible alias for text. */
@@ -280,6 +305,31 @@ export function parseTranscript(opts: {
     ? (raw.languages as Record<string, unknown>[]).map(parseLanguageSegment)
     : [];
   const text = joinWords(words);
+  const sm = raw.summary as Record<string, unknown> | undefined;
+  const summary =
+    sm && typeof sm === "object"
+      ? {
+          text: String(sm.text ?? ""),
+          bullets: Array.isArray(sm.bullets) ? sm.bullets.filter(Boolean).map(String) : [],
+        }
+      : undefined;
+  const paragraphs: Paragraph[] = Array.isArray(raw.paragraphs)
+    ? (raw.paragraphs as Record<string, unknown>[])
+        .filter((p) => p && typeof p === "object")
+        .map((p) => ({
+          text: String(p.text ?? ""),
+          speaker: p.speaker === undefined || p.speaker === null ? undefined : String(p.speaker),
+          start: asNumber(p.start),
+          end: asNumber(p.end),
+          sentences: Array.isArray(p.sentences)
+            ? (p.sentences as Record<string, unknown>[]).map((x) => ({
+                text: String(x.text ?? ""),
+                start: asNumber(x.start),
+                end: asNumber(x.end),
+              }))
+            : [],
+        }))
+    : [];
 
   return makeTranscript({
     jobId,
@@ -291,6 +341,8 @@ export function parseTranscript(opts: {
     languages,
     raw,
     text,
+    summary,
+    paragraphs,
   });
 }
 
@@ -304,6 +356,8 @@ function makeTranscript(args: {
   languages: LanguageSegment[];
   raw: Record<string, unknown> | null;
   text: string;
+  summary?: Summary;
+  paragraphs?: Paragraph[];
 }): Transcript {
   const textValue = args.text;
   return {
@@ -315,6 +369,8 @@ function makeTranscript(args: {
     utterances: args.utterances,
     languages: args.languages,
     raw: args.raw,
+    summary: args.summary,
+    paragraphs: args.paragraphs ?? [],
     get text() {
       return textValue;
     },
@@ -338,6 +394,8 @@ function makeTranscript(args: {
         output_type: args.outputType,
       };
       if (args.languages.length) dict.languages = args.languages;
+      if (args.summary) dict.summary = args.summary;
+      if (args.paragraphs?.length) dict.paragraphs = args.paragraphs;
       return dict;
     },
     toDeepgram(): DeepgramResponse {

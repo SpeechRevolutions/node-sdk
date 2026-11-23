@@ -12,6 +12,15 @@ import { VERSION } from "./version.js";
 import { parseSSEStream } from "./sse.js";
 import { parseTranscript, type Transcript } from "./transcript.js";
 import {
+  LiveSession,
+  loadPcm16,
+  sessionUpdate,
+  streamPcm,
+  streamUrl,
+  type StreamOptions,
+  type StreamResult,
+} from "./streaming.js";
+import {
   byteProgressAdapter,
   iterWithProgress,
   type ByteProgressFn,
@@ -328,6 +337,11 @@ export class SpeechRevolutions {
       ...(opts.customVocabulary ? { custom_vocabulary: opts.customVocabulary } : {}),
       ...(opts.language ? { language: opts.language } : {}),
       ...(opts.callbackUrl ? { callback_url: opts.callbackUrl } : {}),
+      ...(opts.summarize ? { summarize: true } : {}),
+      ...(opts.filterProfanity ? { filter_profanity: true } : {}),
+      ...(opts.paragraphs ? { paragraphs: true } : {}),
+      ...(opts.verbatim !== undefined ? { verbatim: opts.verbatim } : {}),
+      ...(opts.extra ?? {}),
     };
   }
 
@@ -562,8 +576,47 @@ export class SpeechRevolutions {
 
   // job management
 
+  // real-time streaming
+
+  /**
+   * Open a real-time transcription session. In Node, install `ws` (`npm i ws`) or use Node 22+.
+   *
+   * Send PCM16 mono 16 kHz with `session.sendAudio(chunk)` as it is produced, read events with
+   * `onEvent` or `for await (const e of session)`, and `await session.finish()` at the end. The
+   * session buffers unacknowledged audio and resumes a dropped connection on its own.
+   */
+  async stream(options: StreamOptions = {}): Promise<LiveSession> {
+    const session = new LiveSession(
+      streamUrl(this.baseUrl),
+      this.apiKey,
+      { "X-API-Key": this.apiKey, "User-Agent": USER_AGENT },
+      sessionUpdate(options),
+      options.onEvent,
+    );
+    return session.connect();
+  }
+
+  /**
+   * Stream a file as if it were live audio, in real time (the server takes audio at most ~10 s
+   * ahead of the clock). For testing a streaming integration; for files, `transcribe` is faster and
+   * cheaper. Node only; needs ffmpeg for anything but a 16 kHz mono 16-bit WAV.
+   */
+  async streamFile(path: string, options: StreamOptions = {}): Promise<StreamResult> {
+    const pcm = await loadPcm16(path);
+    const session = await this.stream(options);
+    return streamPcm(session, pcm);
+  }
+
   async cancelJob(jobId: string): Promise<void> {
     await this.apiRequest("POST", "/api/v1/jobs/cancel", { job_id: jobId });
+  }
+
+  /**
+   * Delete a job's transcripts now instead of waiting for the automatic purge. A running job is
+   * cancelled first, so nothing is written after the delete.
+   */
+  async deleteJob(jobId: string): Promise<void> {
+    await this.apiRequest("DELETE", `/api/v1/jobs/${encodeURIComponent(jobId)}`);
   }
 
   async checkFailed(jobIds: string[]): Promise<boolean[]> {
