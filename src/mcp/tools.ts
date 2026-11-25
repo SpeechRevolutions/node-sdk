@@ -34,8 +34,8 @@ const TRANSCRIPTION_PROPERTIES = {
   speaker_labels: {
     type: "boolean",
     description:
-      "Label each utterance with the speaker who said it. Included in the price, so leave it on unless the audio is known to be a single speaker.",
-    default: true,
+      "Label each utterance with the speaker who said it. A paid add-on (+$0.02 per audio hour), off by default: turn it on when the user needs who said what (meetings, interviews, calls).",
+    default: false,
   },
   word_timestamps: {
     type: "boolean",
@@ -57,7 +57,7 @@ const TRANSCRIPTION_PROPERTIES = {
 
 function transcriptionOptions(args: Record<string, unknown>): TranscribeOptions {
   return {
-    speakerLabels: args.speaker_labels !== false,
+    speakerLabels: args.speaker_labels === true, // a paid add-on: only when the agent asks for it
     wordTimestamps: args.word_timestamps !== false,
     customVocabulary: Array.isArray(args.custom_vocabulary)
       ? (args.custom_vocabulary as unknown[]).map(String)

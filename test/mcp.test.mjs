@@ -175,3 +175,16 @@ test("both transcription tools accept an optional language", async () => {
     assert.ok(!(schema.required ?? []).includes("language"), `${name}: language must be optional`);
   }
 });
+
+test("speaker labels are a paid add-on, off unless the agent asks", async () => {
+  const { responses } = await exchange([
+    { jsonrpc: "2.0", id: 1, method: "initialize", params: {} },
+    { jsonrpc: "2.0", id: 2, method: "tools/list" },
+  ]);
+  const tools = responses.find((r) => r.id === 2).result.tools;
+  for (const name of ["transcribe_audio", "submit_transcription_job"]) {
+    const prop = tools.find((t) => t.name === name).inputSchema.properties.speaker_labels;
+    assert.equal(prop.default, false, `${name}: speaker_labels must default to off`);
+    assert.match(prop.description, /add-on/);
+  }
+});
