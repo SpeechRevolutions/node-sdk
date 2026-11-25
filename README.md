@@ -74,6 +74,12 @@ await client.transcribe("meeting.mp3", {
 | `summarize` | `boolean` (`result.summary`, +$0.02/hr) | `false` |
 | `filterProfanity` | `boolean` (`s***`, +$0.01/hr) | `false` |
 | `paragraphs` | `boolean` (`result.paragraphs`, free) | `false` |
+| `autoChapters` | `boolean` (`result.chapters`: headline + gist sections covering the whole recording; billed with `summarize`, +$0.02/hr once) | `false` |
+| `knownSpeakers` | `string[]`, e.g. `["Agent", "Customer"]` (speaker identification: `result.speakerNames` maps each speaker to one of them, or leaves it unnamed; needs `speakerLabels`, +$0.02/hr) | `undefined` |
+| `redactPii` | `boolean` (names, organisations, places, addresses, dates, account / card / phone / SSN / IP numbers replaced by `[PERSON_NAME]`-style labels, +$0.08/hr) | `false` |
+| `redactPiiPolicies` | `string[]` (narrow `redactPii` to these types; `PII_POLICIES` lists them) | all |
+| `redactPiiSub` | `"entity_name" \| "hash"` (`[PERSON_NAME]` or `####`) | `"entity_name"` |
+| `entityDetection` | `boolean` (`result.entities`: the same types, typed and timed, +$0.08/hr) | `false` |
 | `verbatim` | `boolean` (keep fillers and false starts) | server default |
 | `extra` | `Record<string, unknown>` (any other API option, as named in the API) | `undefined` |
 | `nltk` | `boolean` (punctuation & capitalization) | `true` |
@@ -158,7 +164,11 @@ console.log(`saved ${path}`);
 
 Batch is $0.09 per audio hour; the add-ons above are charged per audio hour only when turned on.
 `result.summary` (`{ text, bullets }`) and `result.paragraphs` (`{ text, speaker, start, end,
-sentences }`) are set when requested. `await client.deleteJob(jobId)` deletes a job's transcripts
+sentences }`) are set when requested, as are `result.chapters` (`{ start, end, headline, gist }`),
+`result.entities` (`{ entityType, text, start, end }`), `result.speakerNames` (speaker label ->
+name) and `result.piiStatus`. An add-on that could not be delivered is not charged (a summary that
+failed; PII redaction that could only use pattern matching, which `result.piiStatus ===
+"patterns_only"` reports). `await client.deleteJob(jobId)` deletes a job's transcripts
 before the automatic purge.
 
 ## Real-time streaming
@@ -188,16 +198,26 @@ console.log(result.text);
 |---|---|
 | `session.created` | `jobId` |
 | `transcription.partial` | `index`, `text`, `stable` (`text.slice(0, stable)` is settled), `audioS` |
-| `final` | `index`, `text`, `start`, `end` |
+| `final` | `index`, `text`, `start`, `end`, `piiStatus` (with `redactPii`) |
 | `final.revised` | `index`, `text`: a better version of an earlier final |
 | `speech.started` / `turn.ended` | `audioS` / `index`, `start`, `end`, `probability`, `forced` |
 | `language.detected` | `language`, `index` |
+| `voice_focus` | `active`: the stream is locked to the voiceprint |
 | `transcription.done` | `text` |
 | `error` | `code`, `message` |
 
 - `for await (const e of session)` reads the same events as `onEvent`.
 - `turnDetection: { threshold: 0.5, max_silence_ms: 800 }` tunes when a turn ends;
   `session.endTurn()` ends one now (push-to-talk).
+- **PII redaction** (+$0.12 per session hour): `redactPii: true` redacts finals before they reach
+  you (`redactPiiPolicies` / `redactPiiSub` as in batch). Partials are not sent while it is on,
+  unless `includePartials: true`, in which case they arrive unredacted.
+- **Voice focus** (+$0.10 per session hour): lock the stream to one enrolled voice, so other
+  people and background voices are left out. Enrol once with `captureVoiceprint: true`: the
+  result carries `result.voiceprint` and `result.voiceprintQuality` (capture again until `ok`).
+  Then pass `voiceprint` (and optionally `speakerPolicy: "strict"`). A `voice_focus` event
+  (`active`) says whether the lock is active, and only an active lock is billed. You keep the
+  voiceprint; we keep none after the session.
 - **Dropped connections are handled:** the session keeps unacknowledged audio, reconnects with
   its job id for up to 60 s, and replays it. The result comes back complete under the same `jobId`.
 - `await client.streamFile("call.mp3", { language: "en" })` streams a recording in real time

@@ -69,6 +69,23 @@ export interface Summary {
   bullets: string[];
 }
 
+/** The `autoChapters` option: one section of the recording. */
+export interface Chapter {
+  start?: number;
+  end?: number;
+  headline: string;
+  gist: string;
+}
+
+/** `entityDetection`: one item found in the transcript. `text` is its placeholder when also redacted. */
+export interface Entity {
+  /** A `PII_POLICIES` name, e.g. `"person_name"` (`entity_type` on the wire). */
+  entityType: string;
+  text: string;
+  start?: number;
+  end?: number;
+}
+
 export interface Sentence {
   text: string;
   start?: number;
@@ -97,6 +114,14 @@ export interface Transcript {
   summary?: Summary;
   /** Present when the request asked for `paragraphs`. */
   paragraphs: Paragraph[];
+  /** Present when the request asked for `autoChapters`: sections covering the whole recording. */
+  chapters: Chapter[];
+  /** Present when the request asked for `entityDetection`. */
+  entities: Entity[];
+  /** Speaker label -> name or role (`knownSpeakers`, `speaker_names` on the wire); unnamed speakers are absent. */
+  speakerNames: Record<string, string>;
+  /** `"patterns_only"` when PII redaction / entity detection could only use pattern matching (not charged). */
+  piiStatus?: string;
   /** Full transcript text (AssemblyAI / ElevenLabs-style). */
   readonly text: string;
   /** Deepgram-compatible alias for text. */
@@ -330,6 +355,32 @@ export function parseTranscript(opts: {
             : [],
         }))
     : [];
+  const chapters: Chapter[] = Array.isArray(raw.chapters)
+    ? (raw.chapters as Record<string, unknown>[])
+        .filter((c) => c && typeof c === "object")
+        .map((c) => ({
+          start: asNumber(c.start),
+          end: asNumber(c.end),
+          headline: String(c.headline ?? ""),
+          gist: String(c.gist ?? ""),
+        }))
+    : [];
+  const entities: Entity[] = Array.isArray(raw.entities)
+    ? (raw.entities as Record<string, unknown>[])
+        .filter((e) => e && typeof e === "object")
+        .map((e) => ({
+          entityType: String(e.entity_type ?? ""),
+          text: String(e.text ?? ""),
+          start: asNumber(e.start),
+          end: asNumber(e.end),
+        }))
+    : [];
+  const sn = raw.speaker_names;
+  const speakerNames: Record<string, string> = {};
+  if (sn && typeof sn === "object" && !Array.isArray(sn)) {
+    for (const [k, v] of Object.entries(sn as Record<string, unknown>)) speakerNames[k] = String(v);
+  }
+  const piiStatus = typeof raw.pii_status === "string" ? raw.pii_status : undefined;
 
   return makeTranscript({
     jobId,
@@ -343,6 +394,10 @@ export function parseTranscript(opts: {
     text,
     summary,
     paragraphs,
+    chapters,
+    entities,
+    speakerNames,
+    piiStatus,
   });
 }
 
@@ -358,6 +413,10 @@ function makeTranscript(args: {
   text: string;
   summary?: Summary;
   paragraphs?: Paragraph[];
+  chapters?: Chapter[];
+  entities?: Entity[];
+  speakerNames?: Record<string, string>;
+  piiStatus?: string;
 }): Transcript {
   const textValue = args.text;
   return {
@@ -371,6 +430,10 @@ function makeTranscript(args: {
     raw: args.raw,
     summary: args.summary,
     paragraphs: args.paragraphs ?? [],
+    chapters: args.chapters ?? [],
+    entities: args.entities ?? [],
+    speakerNames: args.speakerNames ?? {},
+    piiStatus: args.piiStatus,
     get text() {
       return textValue;
     },
@@ -396,6 +459,19 @@ function makeTranscript(args: {
       if (args.languages.length) dict.languages = args.languages;
       if (args.summary) dict.summary = args.summary;
       if (args.paragraphs?.length) dict.paragraphs = args.paragraphs;
+      if (args.chapters?.length) dict.chapters = args.chapters;
+      if (args.entities?.length) {
+        dict.entities = args.entities.map((e) => ({
+          entity_type: e.entityType,
+          text: e.text,
+          start: e.start,
+          end: e.end,
+        }));
+      }
+      if (args.speakerNames && Object.keys(args.speakerNames).length) {
+        dict.speaker_names = { ...args.speakerNames };
+      }
+      if (args.piiStatus) dict.pii_status = args.piiStatus;
       return dict;
     },
     toDeepgram(): DeepgramResponse {

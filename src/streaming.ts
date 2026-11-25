@@ -47,7 +47,9 @@ export class StreamError extends SpeechRevolutionsError {
  * `transcription.partial` (the open utterance so far; replaces the previous partial of that
  * `index`; `text.slice(0, stable)` is settled), `final`, `final.revised`, `speech.started`,
  * `turn.ended`, `language.detected`, `language.unsupported`, `audio.committed`,
- * `transcription.done`, `error`.
+ * `transcription.done`, `voice_focus` (`active`: the stream is locked to the voiceprint), `warning`,
+ * `error`. A redacted final whose PII pass fell back to patterns only carries `piiStatus`
+ * `"patterns_only"`. Unknown types are passed through with `raw` set.
  */
 export interface StreamEvent {
   type: string;
@@ -63,6 +65,10 @@ export interface StreamEvent {
   jobId?: string;
   code?: string;
   message?: string;
+  /** `voice_focus`: whether the stream is locked to the voiceprint (only an active lock is billed). */
+  active?: boolean;
+  /** On a redacted final: `"patterns_only"` when the PII pass fell back to pattern matching. */
+  piiStatus?: string;
   raw: Record<string, unknown>;
 }
 
@@ -81,6 +87,10 @@ export interface StreamResult {
   finals: StreamFinal[];
   /** False when the session ended before `transcription.done`. */
   complete: boolean;
+  /** With `captureVoiceprint`: the sealed voiceprint to pass as `voiceprint` later. */
+  voiceprint?: string;
+  /** Its quality (`{ score, ok, reasons }`); capture again until `ok`. */
+  voiceprintQuality?: { score?: number; ok?: boolean; reasons?: string[]; [k: string]: unknown };
 }
 
 export interface StreamOptions {
@@ -92,6 +102,27 @@ export interface StreamOptions {
   vocabulary?: string[];
   /** `{ threshold: 0.05–0.99, max_silence_ms: 300–5000 }`: when a turn ends. */
   turnDetection?: { threshold?: number; max_silence_ms?: number };
+  /**
+   * PII redaction (+$0.12 per session hour): finals are redacted before they reach you. Partials
+   * are not sent while it is on, unless `includePartials` is set (they then arrive unredacted).
+   */
+  redactPii?: boolean;
+  /** As in batch (`PII_POLICIES`). Sent only with `redactPii`. */
+  redactPiiPolicies?: string[];
+  /** `"entity_name"` (default) or `"hash"`. Sent only with `redactPii`. */
+  redactPiiSub?: "entity_name" | "hash";
+  /** With `redactPii`: send partials anyway (unredacted). */
+  includePartials?: boolean;
+  /**
+   * Voice focus (+$0.10 per session hour, billed only while a `voice_focus` event says `active`):
+   * lock the stream to this enrolled voice (a `voiceprint` from an earlier `captureVoiceprint`
+   * session's result), so other people and background voices are left out.
+   */
+  voiceprint?: string;
+  /** Enrol a voice: the result carries `voiceprint` and `voiceprintQuality`. */
+  captureVoiceprint?: boolean;
+  /** How strictly `voiceprint` is enforced: `"prefer"` or `"strict"`. */
+  speakerPolicy?: "prefer" | "strict";
   /** Called for every server event. */
   onEvent?: (event: StreamEvent) => void;
   /** Other `session.update` fields, sent as given. */
@@ -230,6 +261,8 @@ function toEvent(m: Record<string, unknown>): StreamEvent {
           ? err
           : undefined,
     message: typeof m.message === "string" ? m.message : typeof err === "string" ? err : undefined,
+    active: typeof m.active === "boolean" ? m.active : undefined,
+    piiStatus: typeof m.pii_status === "string" ? m.pii_status : undefined,
     raw: m,
   };
 }
@@ -577,7 +610,18 @@ export class LiveSession implements AsyncIterable<StreamEvent> {
     const finals = [...this.finals.values()].sort((a, b) => a.index - b.index);
     const text =
       this.done?.text !== undefined ? this.done.text : finals.map((f) => f.text).filter(Boolean).join(" ");
-    return { jobId: this.jobId, text, finals, complete };
+    const raw = this.done?.raw ?? {};
+    return {
+      jobId: this.jobId,
+      text,
+      finals,
+      complete,
+      voiceprint: typeof raw.voiceprint === "string" ? raw.voiceprint : undefined,
+      voiceprintQuality:
+        raw.voiceprint_quality && typeof raw.voiceprint_quality === "object"
+          ? (raw.voiceprint_quality as StreamResult["voiceprintQuality"])
+          : undefined,
+    };
   }
 }
 
@@ -593,6 +637,17 @@ export function sessionUpdate(o: StreamOptions): Record<string, unknown> {
     ...(o.languages?.length ? { languages: o.languages } : {}),
     ...(o.vocabulary?.length ? { vocabulary: o.vocabulary } : {}),
     ...(o.turnDetection ? { turn_detection: o.turnDetection } : {}),
+    ...(o.redactPii
+      ? {
+          redact_pii: true,
+          ...(o.redactPiiPolicies?.length ? { redact_pii_policies: [...o.redactPiiPolicies] } : {}),
+          ...(o.redactPiiSub ? { redact_pii_sub: o.redactPiiSub } : {}),
+        }
+      : {}),
+    ...(o.includePartials !== undefined ? { include_partials: !!o.includePartials } : {}),
+    ...(o.voiceprint ? { voiceprint: o.voiceprint } : {}),
+    ...(o.captureVoiceprint ? { capture_voiceprint: true } : {}),
+    ...(o.speakerPolicy ? { speaker_policy: o.speakerPolicy } : {}),
     ...(o.extra ?? {}),
   };
 }

@@ -340,6 +340,14 @@ export class SpeechRevolutions {
       ...(opts.summarize ? { summarize: true } : {}),
       ...(opts.filterProfanity ? { filter_profanity: true } : {}),
       ...(opts.paragraphs ? { paragraphs: true } : {}),
+      ...(opts.autoChapters ? { auto_chapters: true } : {}),
+      ...(opts.knownSpeakers?.length ? { known_speakers: [...opts.knownSpeakers] } : {}),
+      ...(opts.redactPii ? { redact_pii: true } : {}),
+      ...(opts.redactPii && opts.redactPiiPolicies?.length
+        ? { redact_pii_policies: [...opts.redactPiiPolicies] }
+        : {}),
+      ...(opts.redactPii && opts.redactPiiSub ? { redact_pii_sub: opts.redactPiiSub } : {}),
+      ...(opts.entityDetection ? { entity_detection: true } : {}),
       ...(opts.verbatim !== undefined ? { verbatim: opts.verbatim } : {}),
       ...(opts.extra ?? {}),
     };

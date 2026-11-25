@@ -11,10 +11,12 @@ export {
 } from "./streaming.js";
 export type { StreamEvent, StreamFinal, StreamOptions, StreamResult } from "./streaming.js";
 export type {
+  Chapter,
   DeepgramAlternative,
   DeepgramResponse,
   DeepgramUtterance,
   DeepgramWord,
+  Entity,
   LanguageSegment,
   Paragraph,
   Sentence,
@@ -25,10 +27,11 @@ export type {
 } from "./transcript.js";
 export { parseTranscript } from "./transcript.js";
 export { ProgressPrinter } from "./progress.js";
-export { computePercent } from "./types.js";
+export { computePercent, PII_POLICIES } from "./types.js";
 export type {
   JobStatus,
   OutputType,
+  PiiPolicy,
   ProcessingTier,
   ProgressCallback,
   ProgressEvent,

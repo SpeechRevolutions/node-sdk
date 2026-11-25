@@ -1,6 +1,24 @@
 export type OutputType = "txt" | "json" | "srt" | "vtt" | "docx" | "pdf";
 export type ProcessingTier = "standard" | "economy";
 
+/** Types `redactPiiPolicies` accepts (the server's list; the default is all of them). */
+export const PII_POLICIES = [
+  "person_name",
+  "organization",
+  "location",
+  "address",
+  "date_of_birth",
+  "date",
+  "account_number",
+  "email_address",
+  "phone_number",
+  "credit_card_number",
+  "us_social_security_number",
+  "ip_address",
+] as const;
+
+export type PiiPolicy = (typeof PII_POLICIES)[number];
+
 export interface TranscribeOptions {
   outputType?: OutputType;
   wordTimestamps?: boolean;
@@ -27,6 +45,28 @@ export interface TranscribeOptions {
   filterProfanity?: boolean;
   /** Speaker-aware paragraphs in the JSON output (`transcript.paragraphs`). Free. */
   paragraphs?: boolean;
+  /**
+   * Chapters covering the whole recording (`transcript.chapters`). Billed with summarization:
+   * +$0.02 per audio hour, once, with or without `summarize`.
+   */
+  autoChapters?: boolean;
+  /**
+   * Speaker identification: the names or roles who may be speaking (up to 20). Each diarized
+   * speaker is matched to one, or left unnamed (`transcript.speakerNames`). Needs `speakerLabels`.
+   * +$0.02 per audio hour.
+   */
+  knownSpeakers?: string[];
+  /**
+   * PII redaction in every output format: names, organisations, places, addresses, dates,
+   * account / card / phone / SSN / IP numbers. +$0.08 per audio hour.
+   */
+  redactPii?: boolean;
+  /** Narrow `redactPii` to these types (default all; see {@link PII_POLICIES}). Sent only with `redactPii`. */
+  redactPiiPolicies?: (PiiPolicy | string)[];
+  /** `"entity_name"` (`[PERSON_NAME]`, the default) or `"hash"` (`####`). Sent only with `redactPii`. */
+  redactPiiSub?: "entity_name" | "hash";
+  /** Entity detection (`transcript.entities`): the same types, typed and timed. +$0.08 per audio hour. */
+  entityDetection?: boolean;
   /** Keep (true) or drop (false) fillers and false starts. Omit for the server default. */
   verbatim?: boolean;
   /** Any other API option, sent as given (snake_case, as the API names it). */
@@ -126,6 +166,12 @@ export function resolveOptions(options: TranscribeOptions = {}): Required<
     | "summarize"
     | "filterProfanity"
     | "paragraphs"
+    | "autoChapters"
+    | "knownSpeakers"
+    | "redactPii"
+    | "redactPiiPolicies"
+    | "redactPiiSub"
+    | "entityDetection"
     | "verbatim"
     | "extra"
   > {
@@ -147,6 +193,12 @@ export function resolveOptions(options: TranscribeOptions = {}): Required<
     summarize: options.summarize,
     filterProfanity: options.filterProfanity,
     paragraphs: options.paragraphs,
+    autoChapters: options.autoChapters,
+    knownSpeakers: options.knownSpeakers,
+    redactPii: options.redactPii,
+    redactPiiPolicies: options.redactPiiPolicies,
+    redactPiiSub: options.redactPiiSub,
+    entityDetection: options.entityDetection,
     verbatim: options.verbatim,
     extra: options.extra,
   };
